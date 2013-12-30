@@ -33,33 +33,32 @@ comanche stop
 
 La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé dans le même répertoire que comanche. La syntaxe attendue y est la suivante (configuration type) :
 
-`#### comanche.conf ####
+    #### comanche.conf ####
+    # Port d'écoute
+    set port 8088
 
-`# Port d'écoute
-`set port 8088
+    # Page renvoyée par défaut
+    set default /var/www/index.html
 
-`# Page renvoyée par défaut
-`set default /var/www/index.html
+    # Fichier d’index dans les répertoires
+    set index index.html
 
-`# Fichier d’index dans les répertoires
-`set index index.html
+    # Nombre maximal N de requêtes simultanées (>0)
+    set clients 10
 
-`# Nombre maximal N de requêtes simultanées (>0)
-`set clients 10
+    # Journal des évènements
+    set logfile comanche.log
 
-`# Journal des évènements
-`set logfile comanche.log
+    # Préfixe des chemins des projections
+    set basedir /var/www
 
-`# Préfixe des chemins des projections
-`set basedir /var/www
+    # Routes de projection fichiers
+    route ^/(.*)$ to /var/www/\1
 
-`# Routes de projection fichiers
-`route ^/(.*)$ to /var/www/\1
+    # Routes de projection CGI
+    exec ^/(.*)\.exe$ from /var/lib/cgi/\1
 
-`# Routes de projection CGI
-`exec ^/(.*)\.exe$ from /var/lib/cgi/\1
-
-`#### ####
+    #### ####
 
 ### TODO
 
@@ -69,8 +68,6 @@ La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé 
      * Log des événement de démarrage et d'arrêt
 
 -    Dialogue réseau
-     * Implémentation de la réponse à la requète (réponse par défaut pour l'instant)
-  comprend notament la gestion des routes, l'ouverture, la lecture et l'envoi
-  au client du contenu du fichier
+     * Implémentation de la réponse à la requète (réponse par défaut pour l'instant) comprend notament la gestion des routes, l'ouverture, la lecture et l'envoi au client du contenu du fichier
      * Gestion des fichier text, html et jpg
      * Gestion des cgi
