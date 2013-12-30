@@ -1,0 +1,56 @@
+Comanche
+========
+
+Un mini-serveur web en Perl.
+
+Auteurs:
+
+Elodie Joly
+Martin Piffault
+
+Description:
+
+Comanche est un mini serveur web écrit dans le cadre d'un projet d'étude.
+Le but est d'avoir un petit serveur portable et robuste qui fait peu de choses mais le fait correctement.
+
+S'assurer qu'un fichier comanche.conf correctement écrit est présent à la racine du dossier. Voir section CONFIGURATION.
+
+UTILISATION
+
+Pour démarrer le serveur
+comanche start
+
+Pour l'arrêter
+comanche stop
+
+CONFIGURATION
+
+La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé dans le même répertoire que comanche. La syntaxe attendue y est la suivante (configuration type) :
+
+#### comanche.conf ####
+
+# Port d'écoute
+set port 8088
+
+# Page renvoyée par défaut
+set default /var/www/index.html
+
+# Fichier d’index dans les répertoires
+set index index.html
+
+# Nombre maximal N de requêtes simultanées (>0)
+set clients 10
+
+# Journal des évènements
+set logfile comanche.log
+
+# Préfixe des chemins des projections
+set basedir /var/www
+
+# Routes de projection fichiers
+route ^/(.*)$ to /var/www/\1
+
+# Routes de projection CGI
+exec ^/(.*)\.exe$ from /var/lib/cgi/\1
+
+#### ####

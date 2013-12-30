@@ -1,0 +1,205 @@
+#!/usr/bin/perl
+
+use Socket;
+use POSIX ":sys_wait_h";
+
+$EOL = "\015\012";
+$EOR = $EOL x 2;
+$pidFile = ".comanche.pid";
+
+$ARGV[0] =~ /^(start|stop)$/ or printUsage();
+$action = $ARGV[0];
+
+$conf{port} = "8088";
+$conf{default};
+$conf{index};
+$conf{logfile} = "comanche.log";
+$conf{clients};
+
+
+@relative_route;
+@absolute_route;
+
+@relative_exec;
+@absolute_exec;
+
+
+
+$| = 1;
+
+# prise en compte des la mort des ouvriers
+$SIG{CHLD} = \&FOSSOYEUR;
+
+
+$action =~ /start/ && do {(-f $pidFile) ? print "Un instance de comanche existe déjà.\n" : startDaemon()};
+
+$action =~ /stop/ && stopDaemon();
+
+sub printUsage
+{
+    print "$0 [start|stop]\n";
+    exit 1;
+}
+
+sub satus
+{
+    
+}
+
+sub startDaemon
+{
+    parse_conf();
+
+    $pid = fork;
+
+    # Code effectif du daemon
+    if ($pid == 0)
+    {
+	open(LOG_FILE, ">>$conf{logfile}") or die ("open >> $conf{logfile} $!");
+
+	socket (SERVEUR, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
+	setsockopt (SERVEUR, SOL_SOCKET, SO_REUSEADDR, 1);
+	$mon_adresse = sockaddr_in ($conf{port}, INADDR_ANY) or die ("sockaddr_in ($!)");
+	bind (SERVEUR, $mon_adresse) or die ("bind ($!)");
+	listen (SERVEUR, SOMAXCONN) or die ("listen ($!)");
+	
+	# Le 'next if $!{EINTR};' permet de relancer accept s'il a été interrompu par un signal 
+	while(1) # Boucle du daemon
+	{
+	    accept (CLIENT, SERVEUR) or do {next if $!{EINTR}; die "accept ($!)";};
+	    
+	    overload() unless $nbOuvriers < $conf{clients};
+
+	    my $pid = fork or die "Fork impossible";
+	    if ($pid == 0) # Ouvrier
+	    {
+		autoflush CLIENT 1;
+ 		autoflush STDOUT 1;
+
+		# TODO récupérer l'addresse du client pour log
+		my $requete = acceptrequest();
+		okMessage($requete);
+		
+		closeouvrier();
+		
+		exit 0;
+	    }
+	    else # Répartiteur
+	    {
+		$nbRequetesTraitees ++;
+		$nbOuvriers ++;
+
+		close (CLIENT);
+	    }
+
+	}
+    }
+
+    # Dans le père on conserve le PID du daemon
+    # dans le fichier .daemon.pid (à la manière d'apache dans /var/run).
+    # On protège le fichier en écriture pour éviter toute suppression 
+    # par l'utlisateur.
+    else
+    {
+	open(PID_FILE, ">", $pidFile) or die ("open > $pidFile $!");
+	print PID_FILE $pid;
+	chmod 0400, $pidFile;
+	exit 0;
+    }
+}
+
+# Envoi SIGTERM au processus dont le pid
+# est contenu dans le fichier $pidFile
+sub stopDaemon
+{
+    close(SERVEUR);
+    open(PID_FILE, "<", $pidFile) or die ("open < $pidFile $!");
+    kill(15,<PID_FILE>);
+    close(PID_FILE);
+    unlink $pidFile;
+    exit 0;
+}
+
+# Retourne un message 200 et une page contenant le nom de la requête.
+sub okMessage
+{
+
+    print CLIENT "HTTP/1.1 200 OK".$EOR;
+    print CLIENT "<html>\n <body>\n  <h1> $_[0] </h1>\n </body>\n</html>";
+    print LOG_FILE tmstamp(),"\tRessource demandée : $_[0]\n";
+    
+    close (CLIENT);
+}
+
+# Retourne un code d'erreur au client
+# se termine avec un code d'erreur.
+sub badrequest
+{
+    print CLIENT "HTTP/1.1 400 Bad Request".$EOR;
+    
+    print LOG_FILE tmstamp(),"\tBad Request\n";
+
+    closeouvrier();
+
+    exit 1;
+}
+
+sub closeouvrier
+{
+    $nbOuvriers --;
+    close(CLIENT);
+    close(LOG_FILE);
+    close (SERVEUR);
+}
+
+# Accepte la requete d'un client
+# Si la requête est mal formée, retourne un message d'erreur au client.
+# 
+# FIX la ligne Host:... peut être à n'importe quelle position après la première ligne.
+sub acceptrequest
+{
+    # regex meta = {}[]()^$.|*+?\
+    autoflush CLIENT 1;
+    <CLIENT> =~ /(?i)^((?-i)GET)\s+(\/[^\s]*)\s+HTTP\/1\.1\r?\n/ or badrequest;
+
+    # $2 correspond au 2e groupement qui a matché dans la dernière regex
+    my $requete = $2;
+
+#    while(<CLIENT> !~ /(?i)^host:\s*[^\s]*\s*\r?\n/){}
+    <CLIENT> =~ /(?i)^host:\s*[^\s]*\s*\r?\n/ or badrequest;
+    while(<CLIENT> !~ /^\r?\n/)
+    {}
+
+    return $requete;
+}
+
+sub tmstamp
+{
+    ($sec,$min,$hour,$dummy)=localtime();
+    # possibilité d'une regex ?
+    $hour = (($hour < 10) ? "0" : "").$hour;
+    $min = (($min < 10) ? "0" : "").$min;
+    $sec = (($sec < 10) ? "0" : "").$sec;
+
+    return "[".$hour.":".$min.":".$sec."]";
+}
+
+sub parse_conf {
+    open (CONF, "comanche.conf");
+    foreach (<CONF>) {
+	if(/^set/){
+	    $_ =~ /^set\s([^\s]*)\s([^\s]*)/;
+	    $conf{$1} = $2;
+	}
+    }
+}
+
+sub FOSSOYEUR{
+    local $!;
+    my $child;
+
+    while (($child = waitpid (-1, &WNOHANG)) > 0 ){
+	$nbOuvriers --;
+    }
+    $SIG{CHLD} = \&FOSSOYEUR;
+}
