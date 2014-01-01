@@ -23,7 +23,11 @@ $conf{clients};
 @relative_exec;
 @absolute_exec;
 
-
+%reason_phrases = (
+    200, "OK",
+    400, "Bad Request",
+    503, "Service Unavailable"
+    );
 
 autoflush STDOUT 1;
 
@@ -50,8 +54,6 @@ sub startDaemon
 {
     parse_conf();
 
-#    print STDOUT "Avant 1er fork : $pid\n";
-
     $pid = fork;
     
     print STDOUT "Après 1er fork : $pid\n";
@@ -66,30 +68,15 @@ sub startDaemon
 	$mon_adresse = sockaddr_in ($conf{port}, INADDR_ANY) or die ("sockaddr_in ($!)");
 	bind (SERVEUR, $mon_adresse) or die ("bind ($!)");
 	listen (SERVEUR, SOMAXCONN) or die ("listen ($!)");
-	
-	# DEBUG
-#	print STDOUT "Avant while $pid\n";
 
 	# Le 'next if $!{EINTR};' permet de relancer accept s'il a été interrompu par un signal 
 	while(1) # Boucle du daemon
 	{
 	    accept (CLIENT, SERVEUR) or do {next if $!{EINTR}; die "accept ($!)";};
 	    
-	    # overload() unless $nbOuvriers < $conf{clients};
+	    # senderror() unless $nbOuvriers < $conf{clients}; # TODO fonction de limitation des ouvriers
 	    
-	    # DEBUG
-#	    print STDOUT "Avant fork $pid\n";
-
-	    $pid = fork; # or die ("fork ($!)"); # <<== Illegal seek avec le or die !!!
-
-#	    autoflush CLIENT 1;
-#	    autoflush SERVEUR 1;
-#	    autoflush STDOUT 1;
-	    
-	    # DEBUG
-	    
-#	    print STDOUT "Après fork $pid\n";
-
+	    defined($pid = fork) or die "Pas de fork possible : $!";
 
 	    if ($pid == 0) # Ouvrier
 	    {
@@ -99,7 +86,7 @@ sub startDaemon
 		# TODO récupérer l'addresse du client pour log
 		my $requete = acceptrequest();
 		okMessage($requete);
-		
+
 		closeouvrier();
 		
 		exit 0;
@@ -143,8 +130,9 @@ sub stopDaemon
 # Retourne un message 200 et une page contenant le nom de la requête.
 sub okMessage
 {
+#    print CLIENT "HTTP/1.1 200 OK".$EOR;
+    sendstatus(200);
 
-    print CLIENT "HTTP/1.1 200 OK".$EOR;
     print CLIENT "<html>\n <body>\n  <h1> $_[0] </h1>\n </body>\n</html>";
     print LOG_FILE tmstamp(),"\tRessource demandée : $_[0]\n";
     
@@ -164,12 +152,34 @@ sub badrequest
     exit 1;
 }
 
+sub unavailable
+{
+    print CLIENT "HTTP/1.1 503 Service Unavailable".$EOR;
+
+    print LOG_FILE tmstamp(),"\tService Unavailable\n";
+
+    closeouvrier();
+
+    exit 1;
+}
+
+sub sendstatus
+{
+    my $status = $_[0];
+
+    print CLIENT "HTTP/1.1 $status $reason_phrases{$status}".$EOR;
+
+    print LOG_FILE tmstamp(),"\t$reason_phrases{$status}\n";
+}
+
 sub closeouvrier
 {
     $nbOuvriers --;
     close(CLIENT);
     close(LOG_FILE);
     close (SERVEUR);
+
+    exit 1;
 }
 
 # Accepte la requete d'un client
@@ -180,13 +190,13 @@ sub acceptrequest
 {
     # regex meta = {}[]()^$.|*+?\
     autoflush CLIENT 1;
-    <CLIENT> =~ /(?i)^((?-i)GET)\s+(\/[^\s]*)\s+HTTP\/1\.1\r?\n/ or badrequest;
+    <CLIENT> =~ /(?i)^((?-i)GET)\s+(\/[^\s]*)\s+HTTP\/1\.1\r?\n/ or do {sendstatus(400); closeouvrier();};
 
     # $2 correspond au 2e groupement qui a matché dans la dernière regex
     my $requete = $2;
 
 #    while(<CLIENT> !~ /(?i)^host:\s*[^\s]*\s*\r?\n/){}
-    <CLIENT> =~ /(?i)^host:\s*[^\s]*\s*\r?\n/ or badrequest;
+    <CLIENT> =~ /(?i)^host:\s*[^\s]*\s*\r?\n/ or do {sendstatus(400); closeouvrier();};
     while(<CLIENT> !~ /^\r?\n/)
     {}
 
