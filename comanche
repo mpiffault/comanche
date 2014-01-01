@@ -54,10 +54,8 @@ sub startDaemon
 {
     parse_conf();
 
-    $pid = fork;
+    defined ($pid = fork) or die ("Fork impossible : $!");
     
-    print STDOUT "Après 1er fork : $pid\n";
-
     # Code effectif du daemon
     if ($pid == 0)
     {
@@ -74,9 +72,9 @@ sub startDaemon
 	{
 	    accept (CLIENT, SERVEUR) or do {next if $!{EINTR}; die "accept ($!)";};
 	    
-	    # senderror() unless $nbOuvriers < $conf{clients}; # TODO fonction de limitation des ouvriers
+	    sendstatus(503) unless $nbOuvriers < $conf{clients}; # TODO fonction de limitation des ouvriers
 	    
-	    defined($pid = fork) or die "Pas de fork possible : $!";
+	    defined($pid = fork) or die ("Fork impossible : $!");
 
 	    if ($pid == 0) # Ouvrier
 	    {
@@ -130,37 +128,12 @@ sub stopDaemon
 # Retourne un message 200 et une page contenant le nom de la requête.
 sub okMessage
 {
-#    print CLIENT "HTTP/1.1 200 OK".$EOR;
     sendstatus(200);
 
     print CLIENT "<html>\n <body>\n  <h1> $_[0] </h1>\n </body>\n</html>";
     print LOG_FILE tmstamp(),"\tRessource demandée : $_[0]\n";
     
     close (CLIENT);
-}
-
-# Retourne un code d'erreur au client
-# se termine avec un code d'erreur.
-sub badrequest
-{
-    print CLIENT "HTTP/1.1 400 Bad Request".$EOR;
-    
-    print LOG_FILE tmstamp(),"\tBad Request\n";
-
-    closeouvrier();
-
-    exit 1;
-}
-
-sub unavailable
-{
-    print CLIENT "HTTP/1.1 503 Service Unavailable".$EOR;
-
-    print LOG_FILE tmstamp(),"\tService Unavailable\n";
-
-    closeouvrier();
-
-    exit 1;
 }
 
 sub sendstatus
@@ -192,7 +165,6 @@ sub acceptrequest
     autoflush CLIENT 1;
     <CLIENT> =~ /(?i)^((?-i)GET)\s+(\/[^\s]*)\s+HTTP\/1\.1\r?\n/ or do {sendstatus(400); closeouvrier();};
 
-    # $2 correspond au 2e groupement qui a matché dans la dernière regex
     my $requete = $2;
 
 #    while(<CLIENT> !~ /(?i)^host:\s*[^\s]*\s*\r?\n/){}
