@@ -25,7 +25,7 @@ $conf{clients};
 
 
 
-$| = 1;
+autoflush STDOUT 1;
 
 # prise en compte des la mort des ouvriers
 $SIG{CHLD} = \&FOSSOYEUR;
@@ -50,7 +50,11 @@ sub startDaemon
 {
     parse_conf();
 
+#    print STDOUT "Avant 1er fork : $pid\n";
+
     $pid = fork;
+    
+    print STDOUT "Après 1er fork : $pid\n";
 
     # Code effectif du daemon
     if ($pid == 0)
@@ -63,14 +67,30 @@ sub startDaemon
 	bind (SERVEUR, $mon_adresse) or die ("bind ($!)");
 	listen (SERVEUR, SOMAXCONN) or die ("listen ($!)");
 	
+	# DEBUG
+#	print STDOUT "Avant while $pid\n";
+
 	# Le 'next if $!{EINTR};' permet de relancer accept s'il a été interrompu par un signal 
 	while(1) # Boucle du daemon
 	{
 	    accept (CLIENT, SERVEUR) or do {next if $!{EINTR}; die "accept ($!)";};
 	    
-	    overload() unless $nbOuvriers < $conf{clients};
+	    # overload() unless $nbOuvriers < $conf{clients};
+	    
+	    # DEBUG
+#	    print STDOUT "Avant fork $pid\n";
 
-	    my $pid = fork or die "Fork impossible";
+	    $pid = fork; # or die ("fork ($!)"); # <<== Illegal seek avec le or die !!!
+
+#	    autoflush CLIENT 1;
+#	    autoflush SERVEUR 1;
+#	    autoflush STDOUT 1;
+	    
+	    # DEBUG
+	    
+#	    print STDOUT "Après fork $pid\n";
+
+
 	    if ($pid == 0) # Ouvrier
 	    {
 		autoflush CLIENT 1;
@@ -155,7 +175,7 @@ sub closeouvrier
 # Accepte la requete d'un client
 # Si la requête est mal formée, retourne un message d'erreur au client.
 # 
-# FIX la ligne Host:... peut être à n'importe quelle position après la première ligne.
+# FIXME : la ligne Host:... peut être à n'importe quelle position après la première ligne.
 sub acceptrequest
 {
     # regex meta = {}[]()^$.|*+?\
@@ -185,13 +205,14 @@ sub tmstamp
 }
 
 sub parse_conf {
-    open (CONF, "comanche.conf");
+    open (CONF, "comanche.conf") or die ("open comanche.conf ($!)");
     foreach (<CONF>) {
 	if(/^set/){
 	    $_ =~ /^set\s([^\s]*)\s([^\s]*)/;
 	    $conf{$1} = $2;
 	}
     }
+    close(CONF);
 }
 
 sub FOSSOYEUR{
