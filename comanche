@@ -64,7 +64,7 @@ sub startDaemon
 	listen (SERVEUR, SOMAXCONN)
 	    or die "listen ($!)";
 
-	eventlog("start;local;$conf{port}");
+	eventlog("start","local",$conf{port});
 
 	while(1) # Boucle du daemon
 	{
@@ -88,10 +88,13 @@ sub startDaemon
 		($clientPort, $clientIp) = unpack_sockaddr_in $sockaddr;
 		$clientIp = inet_ntoa $clientIp;
 
-		print STDOUT "IP : $clientIp Port : $clientPort\n";
+#		print STDOUT "IP : $clientIp Port : $clientPort\n";
  
-		my $requete = acceptrequest();
-		okMessage($requete);
+		my @req = acceptrequest();
+
+
+
+		okMessage(@req);
 
 		closeouvrier(0);
 	    }
@@ -123,10 +126,13 @@ sub startDaemon
 # Log la chaîne passée en paramètre
 sub eventlog
 {
+    ($type, $machine, $requete, $projection, $reponse) = @_;
+
     open(LOG_FILE, ">>$conf{logfile}")
 	or die "open $!";
 
-    print LOG_FILE time,";","$_[0]\n";
+#    print LOG_FILE time,";","$_[0]\n";
+    print LOG_FILE join (";",  time, $type, $machine, $requete, $projection, $reponse,"\n");
 
     close LOG_FILE;
 }
@@ -134,36 +140,45 @@ sub eventlog
 # Retourne un message 200 et une page contenant le nom de la requête.
 sub okMessage
 {
-    sendstatus (200);
+    sendstatus (200, $_[0]);
 
-    print CLIENT "<html>\n".
-	" <body>\n".
-	"  <h1> $_[0] </h1>\n".
-	" </body>\n".
-	"</html>";
+    open(RESSOURCE, "<", $conf{default});
 
-    eventlog("get;$clientIp;$_[0];;200");
+    while(<RESSOURCE>)
+    {
+	print CLIENT "$_\n";
+    }
+
+    # print CLIENT "<html>\n".
+    # 	" <body>\n".
+    # 	"  <h1> $_[1] </h1>\n".
+    # 	" </body>\n".
+    # 	"</html>";
 }
 
 sub sendstatus
 {
     print CLIENT "HTTP/1.1 $_[0] $reason_phrases{$_[0]}".$EOR;
+    eventlog("get", $clientIp, $_[1], $projection, $_[0]);
 }
 
+# Retourne une page d'erreur au client
 sub senderror
 {
-    sendstatus($_[0]);
+    my $stat_code = $_[0];
+    my $requete = $_[1];
+
+    sendstatus($stat_code, $requete);
 
     print CLIENT "<html>\n".
 	" <head>\n".
-	"  <title>$_[0] $reason_phrases{$_[0]}</title>\n".
+	"  <title>$stat_code $reason_phrases{$stat_code}</title>\n".
 	" </head>\n".
 	" <body>\n".
-	"  <h1>$reason_phrases{$_[0]}</h1>\n".
+	"  <h1>$reason_phrases{$stat_code}</h1>\n".
 	" </body>\n".
 	"</html>\n";
 
-    eventlog("get;$clientIp;$_[1];$prjection;$_[0];");
     closeouvrier(1);
 }
 
@@ -178,37 +193,60 @@ sub closeouvrier
     exit $_[0];
 }
 
-# Accepte la requete d'un client
-# Si la requête est mal formée, retourne un message d'erreur au client.
-# 
+# Filtre le header de la requete client
+# Si la requête est mal formée, retourne un message d'erreur au client,
+# sinon retourne un tableau contenant la ligne de requete et la ressource demandée
 # FIXME : la ligne Host:... peut être à n'importe quelle position après la première ligne.
 sub acceptrequest
 {
     # regex meta = {}[]()^$.|*+?\
     autoflush CLIENT 1;
-    <CLIENT> =~ /(?i)^((?-i)GET)\s+(\/[^\s]*)\s+HTTP\/1\.1\r?\n/
+
+    my @req;
+
+    <CLIENT> =~ /(?i)(^((?-i)GET)\s+(\/[^\s]*)\s+HTTP\/1\.1)\r?\n/
 	or senderror(400);
 
-    my $requete = $2;
+    # requête
+    $req[0] = $1;
+    # ressource
+    $req[1] = $3;
 
 #    while(<CLIENT> !~ /(?i)^host:\s*[^\s]*\s*\r?\n/){}
     <CLIENT> =~ /(?i)^host:\s*[^\s]*\s*\r?\n/
-	or senderror(400, $requete);
+	or senderror(400, $req[0]);
     while(<CLIENT> !~ /^\r?\n/)
     {}
 
-    return $requete;
+    return @req;
 }
 
 sub parse_conf {
     open (CONF, "comanche.conf")
 	or die ("open comanche.conf ($!)");
+
     foreach (<CONF>) {
-	if(/^set/){
+	if (/^set/){
 	    $_ =~ /^set\s([^\s]*)\s([^\s]*)/;
 	    $conf{$1} = $2;
 	}
+	
+	if (/^route/){
+	    $_ =~ /^route\s([^\s]*)\sto\s([^\s]*)/;
+	#    verifier_fichier($2);
+	    push(@relative_route,$1);
+	    push(@absolute_route,$2);
+	}
+
+	if(/^exec/) {
+	    $_ =~ /^exec\s([^\s]*)\sfrom\s([^\s]*)/;
+	#    verifier_fichier($2);
+	    push(@relative_exec,$1);
+	    push(@absolute_exec,$2);
+	}
+
     }
+
     close(CONF);
 }
 
@@ -253,6 +291,6 @@ sub STOPDAEMON
 {
     while(wait > 0){}
     close (SERVEUR);
-    eventlog("stop;local;$conf{port}");
+    eventlog("stop","local",$conf{port});
     exit 0;
 }
