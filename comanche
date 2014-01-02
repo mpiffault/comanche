@@ -10,13 +10,6 @@ $pidFile = ".comanche.pid";
 $ARGV[0] =~ /^(start|stop|status)$/ or printusage();
 $action = $ARGV[0];
 
-# $conf{port} = "8088";
-# $conf{default};
-# $conf{index};
-# $conf{logfile} = "comanche.log";
-# $conf{clients};
-
-
 @relative_route;
 @absolute_route;
 
@@ -29,22 +22,22 @@ $action = $ARGV[0];
     503, "Service Unavailable"
     );
 
-select STDOUT;
-$| = 1;
+%signaux = (
+    status, "USR1",
+    stop, "USR2"
+    );
 
 # prise en compte des la mort des ouvriers
 $SIG{CHLD} = \&FOSSOYEUR;
-# pour la commande status
-$SIG{USR1} = \&PRINTSTATUS;
-# pour la commande stop
-$SIG{USR2} = \&STOPDAEMON;
+$SIG{$signaux{status}} = \&PRINTSTATUS;
+$SIG{$signaux{stop}} = \&STOPDAEMON;
 
+select STDOUT;
+$| = 1;
 
 $action =~ /^start$/ && do {(-f $pidFile) ? print "Un instance de comanche existe déjà.\n" : startDaemon()};
 
-$action =~ /^status$/ && do {(-f $pidFile) ? sendSignal("USR1") : print "Le service n'est pas démarré.\n"};
-
-$action =~ /^stop$/ && do {(-f $pidFile) ? sendSignal("USR2") : print "Le service n'est pas démarré.\n"};
+$action =~ /^(status|stop)$/ && do {(-f $pidFile) ? sendSignal($signaux{$action}) : print "Le service n'est pas démarré.\n"};
 
 sub printusage
 {
@@ -62,40 +55,41 @@ sub startDaemon
     # Code effectif du daemon
     if ($pid == 0)
     {
-	eventlog("start;local;$conf{port}");
-
 	socket (SERVEUR, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
 	setsockopt (SERVEUR, SOL_SOCKET, SO_REUSEADDR, 1);
 	$mon_adresse = sockaddr_in ($conf{port}, INADDR_ANY)
-	    or die ("sockaddr_in ($!)");
+	    or die "sockaddr_in ($!)";
 	bind (SERVEUR, $mon_adresse)
-	    or die ("bind ($!)");
+	    or die "bind ($!)";
 	listen (SERVEUR, SOMAXCONN)
-	    or die ("listen ($!)");
+	    or die "listen ($!)";
 
+	eventlog("start;local;$conf{port}");
 
 	while(1) # Boucle du daemon
 	{
 	    # Le 'next if $!{EINTR};' permet de relancer accept s'il a été interrompu par un signal.
-	    # Si SERVEUR n'est plus défini, c'est qu'on est entrain de quitter le daemon
 	    accept (CLIENT, SERVEUR)
-		or do {last if !defined(fileno(SERVEUR));next if $!{EINTR}; die "accept ($!)";};
-	    
-	    sendstatus(503) unless $nbOuvriers < $conf{clients}; # TODO fonction de limitation des ouvriers
+		or do {next if $!{EINTR}; die "accept ($!)";};
 	    
 	    defined($pid = fork)
-		or die ("Fork impossible : $!");
+		or die "Fork impossible : $!";
 
 	    if ($pid == 0) # Ouvrier
 	    {
+
+		senderror(503) unless $nbOuvriers < $conf{clients};
+
 		autoflush CLIENT 1;
  		autoflush STDOUT 1;
+		
+		# Récupération de l'ip et du port client
+		$sockaddr = getpeername CLIENT;
+		($clientPort, $clientIp) = unpack_sockaddr_in $sockaddr;
+		$clientIp = inet_ntoa $clientIp;
 
-		# $sockaddr = getpeername CLIENT;
-		# ($clientPort, $clientIp) = unpack_sockaddr_in $sockaddr;
-		# print STDOUT "IP : $clientIp Port : $clientPort\n";
+		print STDOUT "IP : $clientIp Port : $clientPort\n";
  
-		# TODO récupérer l'addresse du client pour log
 		my $requete = acceptrequest();
 		okMessage($requete);
 
@@ -119,7 +113,7 @@ sub startDaemon
     else
     {
 	open(PID_FILE, ">", $pidFile)
-	    or die ("open $!");
+	    or die "open $!";
 	print PID_FILE $pid;
 	chmod 0400, $pidFile;
 	exit 0;
@@ -130,17 +124,17 @@ sub startDaemon
 sub eventlog
 {
     open(LOG_FILE, ">>$conf{logfile}")
-	or die ("open $!");
+	or die "open $!";
 
     print LOG_FILE time,";","$_[0]\n";
 
-    close(LOG_FILE);
+    close LOG_FILE;
 }
 
 # Retourne un message 200 et une page contenant le nom de la requête.
 sub okMessage
 {
-    sendstatus(200);
+    sendstatus (200);
 
     print CLIENT "<html>\n".
 	" <body>\n".
@@ -148,7 +142,7 @@ sub okMessage
 	" </body>\n".
 	"</html>";
 
-    eventlog("get;distant;$_[0];;200");
+    eventlog("get;$clientIp;$_[0];;200");
 }
 
 sub sendstatus
@@ -169,6 +163,7 @@ sub senderror
 	" </body>\n".
 	"</html>\n";
 
+    eventlog("get;$clientIp;$_[1];$prjection;$_[0];");
     closeouvrier(1);
 }
 
@@ -198,7 +193,7 @@ sub acceptrequest
 
 #    while(<CLIENT> !~ /(?i)^host:\s*[^\s]*\s*\r?\n/){}
     <CLIENT> =~ /(?i)^host:\s*[^\s]*\s*\r?\n/
-	or senderror(400);
+	or senderror(400, $requete);
     while(<CLIENT> !~ /^\r?\n/)
     {}
 
@@ -223,10 +218,17 @@ sub sendSignal
 {
     open(PID_FILE, "<", $pidFile)
 	or die ("open $!");
-    kill ("$_[0]",<PID_FILE>);
-    close(PID_FILE);
+    $daemonPid = <PID_FILE>;
+    kill "$_[0]" => $daemonPid;
+    close PID_FILE;
 
-    unlink $pidFile if $_[0] =~ /USR2/;
+    # attente de la fin du daemon et supressin du fichier $pidFile
+    if ($_[0] =~ /$signaux{stop}/)
+    {
+	while (kill 0 => $daemonPid) {print "."; select(undef,undef,undef,0.5);}
+	print "stopped\n";
+	unlink($pidFile);
+    }
 
     exit 0;
 }
@@ -252,4 +254,5 @@ sub STOPDAEMON
     while(wait > 0){}
     close (SERVEUR);
     eventlog("stop;local;$conf{port}");
+    exit 0;
 }
