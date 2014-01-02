@@ -7,7 +7,7 @@ $EOL = "\015\012";
 $EOR = $EOL x 2;
 $pidFile = ".comanche.pid";
 
-$ARGV[0] =~ /^(start|stop)$/ or printusage();
+$ARGV[0] =~ /^(start|stop|status)$/ or printusage();
 $action = $ARGV[0];
 
 # $conf{port} = "8088";
@@ -29,15 +29,22 @@ $action = $ARGV[0];
     503, "Service Unavailable"
     );
 
-autoflush STDOUT 1;
+select STDOUT;
+$| = 1;
 
 # prise en compte des la mort des ouvriers
 $SIG{CHLD} = \&FOSSOYEUR;
+# pour la commande status
+$SIG{USR1} = \&PRINTSTATUS;
+# pour la commande stop
+$SIG{USR2} = \&STOPDAEMON;
 
 
-$action =~ /start/ && do {(-f $pidFile) ? print "Un instance de comanche existe déjà.\n" : startDaemon()};
+$action =~ /^start$/ && do {(-f $pidFile) ? print "Un instance de comanche existe déjà.\n" : startDaemon()};
 
-$action =~ /stop/ && stopDaemon();
+$action =~ /^status$/ && do {(-f $pidFile) ? sendSignal("USR1") : print "Le service n'est pas démarré.\n"};
+
+$action =~ /^stop$/ && do {(-f $pidFile) ? sendSignal("USR2") : print "Le service n'est pas démarré.\n"};
 
 sub printusage
 {
@@ -45,19 +52,12 @@ sub printusage
     exit 1;
 }
 
-sub satus
-{
-    
-}
-
 sub startDaemon
 {
     parse_conf();
 
-    defined ($pid = fork) or die ("Fork impossible : $!");
-    
-
-
+    defined ($pid = fork)
+	or die ("Fork impossible : $!");
     
     # Code effectif du daemon
     if ($pid == 0)
@@ -66,31 +66,40 @@ sub startDaemon
 
 	socket (SERVEUR, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
 	setsockopt (SERVEUR, SOL_SOCKET, SO_REUSEADDR, 1);
-	$mon_adresse = sockaddr_in ($conf{port}, INADDR_ANY) or die ("sockaddr_in ($!)");
-	bind (SERVEUR, $mon_adresse) or die ("bind ($!)");
-	listen (SERVEUR, SOMAXCONN) or die ("listen ($!)");
+	$mon_adresse = sockaddr_in ($conf{port}, INADDR_ANY)
+	    or die ("sockaddr_in ($!)");
+	bind (SERVEUR, $mon_adresse)
+	    or die ("bind ($!)");
+	listen (SERVEUR, SOMAXCONN)
+	    or die ("listen ($!)");
 
-	# Le 'next if $!{EINTR};' permet de relancer accept s'il a été interrompu par un signal 
+
 	while(1) # Boucle du daemon
 	{
-	    accept (CLIENT, SERVEUR) or do {next if $!{EINTR}; die "accept ($!)";};
+	    # Le 'next if $!{EINTR};' permet de relancer accept s'il a été interrompu par un signal.
+	    # Si SERVEUR n'est plus défini, c'est qu'on est entrain de quitter le daemon
+	    accept (CLIENT, SERVEUR)
+		or do {last if !defined(fileno(SERVEUR));next if $!{EINTR}; die "accept ($!)";};
 	    
 	    sendstatus(503) unless $nbOuvriers < $conf{clients}; # TODO fonction de limitation des ouvriers
 	    
-	    defined($pid = fork) or die ("Fork impossible : $!");
+	    defined($pid = fork)
+		or die ("Fork impossible : $!");
 
 	    if ($pid == 0) # Ouvrier
 	    {
 		autoflush CLIENT 1;
  		autoflush STDOUT 1;
 
+		# $sockaddr = getpeername CLIENT;
+		# ($clientPort, $clientIp) = unpack_sockaddr_in $sockaddr;
+		# print STDOUT "IP : $clientIp Port : $clientPort\n";
+ 
 		# TODO récupérer l'addresse du client pour log
 		my $requete = acceptrequest();
 		okMessage($requete);
 
-		closeouvrier();
-		
-		exit 0;
+		closeouvrier(0);
 	    }
 	    else # Répartiteur
 	    {
@@ -109,30 +118,19 @@ sub startDaemon
     # par l'utlisateur.
     else
     {
-	open(PID_FILE, ">", $pidFile) or die ("open $!");
+	open(PID_FILE, ">", $pidFile)
+	    or die ("open $!");
 	print PID_FILE $pid;
 	chmod 0400, $pidFile;
 	exit 0;
     }
 }
 
-# Envoi SIGTERM au processus dont le pid
-# est contenu dans le fichier $pidFile
-sub stopDaemon
-{
-    close(SERVEUR);
-    open(PID_FILE, "<", $pidFile) or die ("open $!");
-
-    kill(15,<PID_FILE>);
-    close(PID_FILE);
-    unlink $pidFile;
-
-    exit 0;
-}
-
+# Log la chaîne passée en paramètre
 sub eventlog
 {
-    open(LOG_FILE, ">>$conf{logfile}") or die ("open $!");
+    open(LOG_FILE, ">>$conf{logfile}")
+	or die ("open $!");
 
     print LOG_FILE time,";","$_[0]\n";
 
@@ -144,27 +142,45 @@ sub okMessage
 {
     sendstatus(200);
 
-    print CLIENT "<html>\n <body>\n  <h1> $_[0] </h1>\n </body>\n</html>";
+    print CLIENT "<html>\n".
+	" <body>\n".
+	"  <h1> $_[0] </h1>\n".
+	" </body>\n".
+	"</html>";
 
-    eventlog("GET : $_[0]");
-    
-    close (CLIENT);
+    eventlog("get;distant;$_[0];;200");
 }
 
 sub sendstatus
 {
-    my $status = $_[0];
-
-    print CLIENT "HTTP/1.1 $status $reason_phrases{$status}".$EOR;
+    print CLIENT "HTTP/1.1 $_[0] $reason_phrases{$_[0]}".$EOR;
 }
 
+sub senderror
+{
+    sendstatus($_[0]);
+
+    print CLIENT "<html>\n".
+	" <head>\n".
+	"  <title>$_[0] $reason_phrases{$_[0]}</title>\n".
+	" </head>\n".
+	" <body>\n".
+	"  <h1>$reason_phrases{$_[0]}</h1>\n".
+	" </body>\n".
+	"</html>\n";
+
+    closeouvrier(1);
+}
+
+# Termine l'ouvrier avec un code de retour
+# suivant le paramètre passé
 sub closeouvrier
 {
     $nbOuvriers --;
     close(CLIENT);
     close (SERVEUR);
 
-    exit 1;
+    exit $_[0];
 }
 
 # Accepte la requete d'un client
@@ -175,12 +191,14 @@ sub acceptrequest
 {
     # regex meta = {}[]()^$.|*+?\
     autoflush CLIENT 1;
-    <CLIENT> =~ /(?i)^((?-i)GET)\s+(\/[^\s]*)\s+HTTP\/1\.1\r?\n/ or do {sendstatus(400); closeouvrier();};
+    <CLIENT> =~ /(?i)^((?-i)GET)\s+(\/[^\s]*)\s+HTTP\/1\.1\r?\n/
+	or senderror(400);
 
     my $requete = $2;
 
 #    while(<CLIENT> !~ /(?i)^host:\s*[^\s]*\s*\r?\n/){}
-    <CLIENT> =~ /(?i)^host:\s*[^\s]*\s*\r?\n/ or do {sendstatus(400); closeouvrier();};
+    <CLIENT> =~ /(?i)^host:\s*[^\s]*\s*\r?\n/
+	or senderror(400);
     while(<CLIENT> !~ /^\r?\n/)
     {}
 
@@ -188,7 +206,8 @@ sub acceptrequest
 }
 
 sub parse_conf {
-    open (CONF, "comanche.conf") or die ("open comanche.conf ($!)");
+    open (CONF, "comanche.conf")
+	or die ("open comanche.conf ($!)");
     foreach (<CONF>) {
 	if(/^set/){
 	    $_ =~ /^set\s([^\s]*)\s([^\s]*)/;
@@ -196,6 +215,20 @@ sub parse_conf {
 	}
     }
     close(CONF);
+}
+
+# Envoi le signal passé en paramètre au processus dont le pid
+# est contenu dans le fichier $pidFile
+sub sendSignal
+{
+    open(PID_FILE, "<", $pidFile)
+	or die ("open $!");
+    kill ("$_[0]",<PID_FILE>);
+    close(PID_FILE);
+
+    unlink $pidFile if $_[0] =~ /USR2/;
+
+    exit 0;
 }
 
 sub FOSSOYEUR{
@@ -206,4 +239,17 @@ sub FOSSOYEUR{
 	$nbOuvriers --;
     }
     $SIG{CHLD} = \&FOSSOYEUR;
+}
+
+sub PRINTSTATUS
+{
+    print STDOUT "status !\n";
+}
+
+
+sub STOPDAEMON
+{
+    while(wait > 0){}
+    close (SERVEUR);
+    eventlog("stop;local;$conf{port}");
 }
