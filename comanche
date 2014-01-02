@@ -1,20 +1,20 @@
 #!/usr/bin/perl
 
 use Socket;
-use POSIX ":sys_wait_h";
+use POSIX qw(:sys_wait_h strftime);
 
 $EOL = "\015\012";
 $EOR = $EOL x 2;
 $pidFile = ".comanche.pid";
 
-$ARGV[0] =~ /^(start|stop)$/ or printUsage();
+$ARGV[0] =~ /^(start|stop)$/ or printusage();
 $action = $ARGV[0];
 
-$conf{port} = "8088";
-$conf{default};
-$conf{index};
-$conf{logfile} = "comanche.log";
-$conf{clients};
+# $conf{port} = "8088";
+# $conf{default};
+# $conf{index};
+# $conf{logfile} = "comanche.log";
+# $conf{clients};
 
 
 @relative_route;
@@ -39,7 +39,7 @@ $action =~ /start/ && do {(-f $pidFile) ? print "Un instance de comanche existe 
 
 $action =~ /stop/ && stopDaemon();
 
-sub printUsage
+sub printusage
 {
     print "$0 [start|stop]\n";
     exit 1;
@@ -56,10 +56,13 @@ sub startDaemon
 
     defined ($pid = fork) or die ("Fork impossible : $!");
     
+
+
+    
     # Code effectif du daemon
     if ($pid == 0)
     {
-	open(LOG_FILE, ">>$conf{logfile}") or die ("open >> $conf{logfile} $!");
+	eventlog("start;local;$conf{port}");
 
 	socket (SERVEUR, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
 	setsockopt (SERVEUR, SOL_SOCKET, SO_REUSEADDR, 1);
@@ -106,7 +109,7 @@ sub startDaemon
     # par l'utlisateur.
     else
     {
-	open(PID_FILE, ">", $pidFile) or die ("open > $pidFile $!");
+	open(PID_FILE, ">", $pidFile) or die ("open $!");
 	print PID_FILE $pid;
 	chmod 0400, $pidFile;
 	exit 0;
@@ -118,11 +121,22 @@ sub startDaemon
 sub stopDaemon
 {
     close(SERVEUR);
-    open(PID_FILE, "<", $pidFile) or die ("open < $pidFile $!");
+    open(PID_FILE, "<", $pidFile) or die ("open $!");
+
     kill(15,<PID_FILE>);
     close(PID_FILE);
     unlink $pidFile;
+
     exit 0;
+}
+
+sub eventlog
+{
+    open(LOG_FILE, ">>$conf{logfile}") or die ("open $!");
+
+    print LOG_FILE time,";","$_[0]\n";
+
+    close(LOG_FILE);
 }
 
 # Retourne un message 200 et une page contenant le nom de la requête.
@@ -131,7 +145,8 @@ sub okMessage
     sendstatus(200);
 
     print CLIENT "<html>\n <body>\n  <h1> $_[0] </h1>\n </body>\n</html>";
-    print LOG_FILE tmstamp(),"\tRessource demandée : $_[0]\n";
+
+    eventlog("GET : $_[0]");
     
     close (CLIENT);
 }
@@ -141,15 +156,12 @@ sub sendstatus
     my $status = $_[0];
 
     print CLIENT "HTTP/1.1 $status $reason_phrases{$status}".$EOR;
-
-    print LOG_FILE tmstamp(),"\t$reason_phrases{$status}\n";
 }
 
 sub closeouvrier
 {
     $nbOuvriers --;
     close(CLIENT);
-    close(LOG_FILE);
     close (SERVEUR);
 
     exit 1;
@@ -173,17 +185,6 @@ sub acceptrequest
     {}
 
     return $requete;
-}
-
-sub tmstamp
-{
-    ($sec,$min,$hour,$dummy)=localtime();
-    # possibilité d'une regex ?
-    $hour = (($hour < 10) ? "0" : "").$hour;
-    $min = (($min < 10) ? "0" : "").$min;
-    $sec = (($sec < 10) ? "0" : "").$sec;
-
-    return "[".$hour.":".$min.":".$sec."]";
 }
 
 sub parse_conf {
