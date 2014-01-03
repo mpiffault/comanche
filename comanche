@@ -35,7 +35,7 @@ $SIG{$signaux{stop}} = \&STOPDAEMON;
 select STDOUT;
 $| = 1;
 
-$action =~ /^start$/ && do {(-f $pidFile) ? die "Un instance de comanche existe déjà.\n" : startDaemon()};
+$action =~ /^start$/ && do {(-f $pidFile) ? die "Une instance de comanche existe déjà.\n" : startDaemon()};
 
 $action =~ /^(status|stop)$/ && do {(-f $pidFile) ? sendSignal($signaux{$action}) : die "Le service n'est pas démarré.\n"};
 
@@ -242,7 +242,7 @@ sub sendSignal
     kill "$_[0]" => $daemonPid;
     close PID_FILE;
 
-    # attente de la fin du daemon et supressin du fichier $pidFile
+    # attente de la fin du daemon et supression du fichier $pidFile
     if ($_[0] =~ /$signaux{stop}/)
     {
 	while (kill 0 => $daemonPid) {print "."; select(undef,undef,undef,0.5);}
