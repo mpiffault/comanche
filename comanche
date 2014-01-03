@@ -2,6 +2,7 @@
 
 use Socket;
 use POSIX qw(:sys_wait_h strftime);
+use File::MimeInfo;
 
 $ARGV[0] =~ /^(start|stop|status)$/ or die ("$0 [start|stop|status]\n");
 $action = $ARGV[0];
@@ -18,6 +19,7 @@ $pidFile = ".comanche.pid";
 %reason_phrases = (
     200, "OK",
     400, "Bad Request",
+    404, "Not Found",
     503, "Service Unavailable"
     );
 
@@ -31,6 +33,8 @@ $SIG{CHLD} = \&FOSSOYEUR;
 $SIG{$signaux{status}} = \&PRINTSTATUS;
 $SIG{$signaux{stop}} = \&STOPDAEMON;
 
+$recues = 0;
+$traitees = 0;
 
 select STDOUT;
 $| = 1;
@@ -62,6 +66,7 @@ sub startDaemon
 
 	while(1)
 	{
+	    # on reprend la boucle si interruption système
 	    accept (CLIENT, SERVEUR)
 		or do {next if $!{EINTR}; die "accept ($!)";};
 	    
@@ -88,8 +93,6 @@ sub startDaemon
 
 	        $rep = construirereponse(@res);
 		
-#		print "Reponse : ".$rep."\n"; # if defined($rep);
-
 		if ($rep)
 		{
 		    sendstatus(200, $req[0]);
@@ -97,10 +100,8 @@ sub startDaemon
 		}
 		else
 		{
-		    senderror(404);
+		    senderror(404, $req[0]);
 		}
-
-#		okMessage(@req);
 
 		closeouvrier(0);
 	    }
@@ -135,28 +136,22 @@ sub construirereponse
 
     if (defined $_[0])
     {
-	print "Defined ! : $_[0] type:$_[1]\n"; # DEBUG
-
 	my $ressource = $_[0];
 
-	local $/ = "/";
-
+	
+	# TODO page de liens si pas d'index
 	if (-d $ressource)
 	{
-	    print "Dossier ! : $ressource\n"; # DEBUG
+	    local $/ = "/";
+
 	    chomp($ressource);
-	    $ressource = $ressource.$conf{index};
+	    $ressource = $ressource."/".$conf{index};
 	}
 
-	if (! -f $ressource)
-	{
-	    print "Fichier $ressource n'existe pas !\n"; # DEBUG
-	    return undef;
-	}
+	return undef if (! -f $ressource);
 
 	if ($_[1] eq "stat")
 	{
-	    print "Chemin statique !\n"; # DEBUG
 	    $reponse = lirefichier($ressource);
 	}
 	else
@@ -180,24 +175,10 @@ sub eventlog
     close LOG_FILE;
 }
 
-# DEBUG
-# Retourne un message 200 et une page contenant le nom de la requête.
-sub okMessage
-{
-    sendstatus (200, $_[0]);
-
-    open(RESSOURCE, "<", $conf{default});
-
-    while(<RESSOURCE>)
-    {
-	print CLIENT "$_\n";
-    }
-
-}
-
 # Param : (statuscode, requete)
 sub sendstatus
 {
+    
     print CLIENT "HTTP/1.1 $_[0] $reason_phrases{$_[0]}".$EOR;
     eventlog("get", $ip_client, $_[1], $projection, $_[0]);
 }
@@ -251,7 +232,8 @@ sub closeouvrier
 # Filtre le header de la requete client
 # Si la requête est mal formée, retourne un message d'erreur au client,
 # sinon retourne un tableau contenant la ligne de requete et la ressource demandée
-# FIXME : la ligne Host:... peut être à n'importe quelle position après la première ligne.
+# BUG : la ligne Host:... peut être à n'importe quelle position
+# après la première ligne. Erreur avec wget par exemple.
 sub acceptrequest
 {
     # regex meta = {}[]()^$.|*+?\
@@ -267,13 +249,28 @@ sub acceptrequest
     # ressource
     $req[1] = $3;
 
-#    while(<CLIENT> !~ /(?i)^host:\s*[^\s]*\s*\r?\n/){}
-    <CLIENT> =~ /(?i)^host:\s*[^\s]*\s*\r?\n/
-	or senderror(400, $req[0]);
-    while(<CLIENT> !~ /^\r?\n/)
-    {}
+    my $ok;
+    while(1)
+    {
+	$ligne = <CLIENT>;
+	$ok = 1 if ($ligne =~ /(?i)^host:\s*[^\s]*\s*\r?\n/);
 
-    return @req;
+	if ($ligne =~ /^\r?\n/)
+	{
+	    return @req if $ok;
+	    senderror(400, $req[0]);
+	}
+    }
+
+
+#   while(<CLIENT> !~ /(?i)^host:\s*[^\s]*\s*\r?\n/){}
+    # <CLIENT> =~ /(?i)^host:\s*[^\s]*\s*\r?\n/
+    # 	or senderror(400, $req[0]);
+
+    # while(<CLIENT> !~ /^\r?\n/)
+    # {}
+
+    # return @req;
 }
 
 # Param : requête (chemin relatif demandé)
@@ -299,6 +296,7 @@ sub getressource
     return undef;
 }
 
+# Lit et charge la configuration de $confFile
 sub parse_conf {
     open (CONF, "$confFile")
 	or die ("open ($!)");
@@ -336,6 +334,7 @@ sub parse_conf {
 
 # Envoi le signal passé en paramètre au processus dont le pid
 # est contenu dans le fichier $pidFile
+# Param : signal à envoyer
 sub sendSignal
 {
     open(PID_FILE, "<", $pidFile)
@@ -355,6 +354,7 @@ sub sendSignal
     exit 0;
 }
 
+# Enregistre la mort d'un ouvrier
 sub FOSSOYEUR{
     local $!;
     my $pid;
@@ -367,15 +367,18 @@ sub FOSSOYEUR{
     $SIG{CHLD} = \&FOSSOYEUR;
 }
 
+# Ecrit le status sur la sortie standard
+# BUG : Methode utilisée écrit sur la sortie
+# du terminal utilisé pour démarrer le serveur
 sub PRINTSTATUS
 {
     @ouvriers = keys %children;
     print STDOUT "PID du daemon : $$\n".
-	"Requêtes - reçues:\n".
+	"Requêtes - reçues: $recues, traitées: $traitees\n".
 	scalar @ouvriers." ouvriers actifs : (@ouvriers)\n";
 }
 
-
+# Arrête le serveur proprement
 sub STOPDAEMON
 {
     while(wait > 0){}
