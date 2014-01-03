@@ -82,10 +82,25 @@ sub startDaemon
 		$ip_client = inet_ntoa $ip_client;
 
 		my @req = acceptrequest();
-
 		
+		
+		@res = getressource($req[1]);
 
-		okMessage(@req);
+	        $rep = construirereponse(@res);
+		
+#		print "Reponse : ".$rep."\n"; # if defined($rep);
+
+		if ($rep)
+		{
+		    sendstatus(200, $req[0]);
+		    print CLIENT $rep;
+		}
+		else
+		{
+		    senderror(404);
+		}
+
+#		okMessage(@req);
 
 		closeouvrier(0);
 	    }
@@ -113,6 +128,48 @@ sub startDaemon
     }
 }
 
+# Prend en paramètre (ressource, type)
+sub construirereponse
+{
+    my $reponse;
+
+    if (defined $_[0])
+    {
+	print "Defined ! : $_[0] type:$_[1]\n"; # DEBUG
+
+	my $ressource = $_[0];
+
+	local $/ = "/";
+
+	if (-d $ressource)
+	{
+	    print "Dossier ! : $ressource\n"; # DEBUG
+	    chomp($ressource);
+	    $ressource = $ressource.$conf{index};
+	}
+
+	if (! -f $ressource)
+	{
+	    print "Fichier $ressource n'existe pas !\n"; # DEBUG
+	    return undef;
+	}
+
+	if ($_[1] eq "stat")
+	{
+	    print "Chemin statique !\n"; # DEBUG
+	    $reponse = lirefichier($ressource);
+	}
+	else
+	{
+	    $reponse = `$ressource`;
+	}
+    }
+
+    return $reponse;
+}
+
+# Ecrit dans le fichier de log
+# Param : (type, machine, (port|requete), projection, statuscode)
 sub eventlog
 {
     open(LOG_FILE, ">>$conf{logfile}")
@@ -123,6 +180,7 @@ sub eventlog
     close LOG_FILE;
 }
 
+# DEBUG
 # Retourne un message 200 et une page contenant le nom de la requête.
 sub okMessage
 {
@@ -137,13 +195,15 @@ sub okMessage
 
 }
 
+# Param : (statuscode, requete)
 sub sendstatus
 {
     print CLIENT "HTTP/1.1 $_[0] $reason_phrases{$_[0]}".$EOR;
     eventlog("get", $ip_client, $_[1], $projection, $_[0]);
 }
 
-# Retourne une page d'erreur au client
+# Envoi une page d'erreur au client et ferme la connection
+# Param : (statuscode, requete)
 sub senderror
 {
     my $stat_code = $_[0];
@@ -161,6 +221,22 @@ sub senderror
 	"</html>\n";
 
     closeouvrier(1);
+}
+
+# Retourne le contenu d'un fichier
+# Param : chemin d'un fichier existant
+sub lirefichier
+{
+    my $contenu;
+
+    open (FICHIER, "<", $_[0]);
+    while (<FICHIER>)
+    {
+	$contenu .= $_;
+    }
+    close (FICHIER);
+
+    return $contenu;
 }
 
 # Termine l'ouvrier avec un code de retour
@@ -200,6 +276,29 @@ sub acceptrequest
     return @req;
 }
 
+# Param : requête (chemin relatif demandé)
+# Retourne : tableau {ressource locale , type (stat ou dyn)}
+# ou undef si aucune correpondance n'est trouvée.
+sub getressource
+{
+    my @res;
+    $res[0] = $_[0];
+
+    foreach (0..$#relative_path)
+    {
+	if ($res[0] =~ m{$relative_path[$_]})
+	{
+	    $nom_res = $1;
+
+	    $res[0] = $absolute_path[$_] =~ s{\\1}{$nom_res}r;
+	    
+	    $res[1] = $proj_type[$_];
+	    return @res;
+	}
+    }
+    return undef;
+}
+
 sub parse_conf {
     open (CONF, "$confFile")
 	or die ("open ($!)");
@@ -207,17 +306,20 @@ sub parse_conf {
     while (<CONF>) {
 	if (/^\s*(#|$)/)
 	{next}
-	elsif (/^\s*set\s*([^\s#]*)\s*([^\s#]*)\s*(#.*|$)/)
+
+	elsif (/^\s*set\s*(port|default|index|logfile|clients)\s*([^\s#]*)\s*(#.*|$)/)
 	{
 	    $conf{$1} = $2;
 	}
+
 	elsif (/^\s*route\s*([^\s#]*)\s*to\s*([^\s#]*)\s*(#.*|$)/)
 	{
 	    push(@proj_type,"stat");
 	    push(@relative_path,$1);
 	    push(@absolute_path,$2);
 	}
-	elsif(/^exec\s*([^\s#]*)\s*from\s*([^\s#]*)\s*(#.*|$)/)
+
+	elsif (/^\s*exec\s*([^\s#]*)\s*from\s*([^\s#]*)\s*(#.*|$)/)
 	{
 	    push(@proj_type,"dyn");
 	    push(@relative_path,$1);
