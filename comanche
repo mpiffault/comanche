@@ -3,18 +3,17 @@
 use Socket;
 use POSIX qw(:sys_wait_h strftime);
 
-$EOL = "\015\012";
-$EOR = $EOL x 2;
-$pidFile = ".comanche.pid";
-
-$ARGV[0] =~ /^(start|stop|status)$/ or printusage();
+$ARGV[0] =~ /^(start|stop|status)$/ or die ("$0 [start|stop|status]\n");
 $action = $ARGV[0];
 
-@relative_route;
-@absolute_route;
+$EOL = "\015\012";
+$EOR = $EOL x 2;
+$confFile = "comanche.conf";
+$pidFile = ".comanche.pid";
 
-@relative_exec;
-@absolute_exec;
+@proj_type;
+@relative_path;
+@absolute_path;
 
 %reason_phrases = (
     200, "OK",
@@ -32,18 +31,13 @@ $SIG{CHLD} = \&FOSSOYEUR;
 $SIG{$signaux{status}} = \&PRINTSTATUS;
 $SIG{$signaux{stop}} = \&STOPDAEMON;
 
+
 select STDOUT;
 $| = 1;
 
-$action =~ /^start$/ && do {(-f $pidFile) ? print "Un instance de comanche existe déjà.\n" : startDaemon()};
+$action =~ /^start$/ && do {(-f $pidFile) ? die "Un instance de comanche existe déjà.\n" : startDaemon()};
 
-$action =~ /^(status|stop)$/ && do {(-f $pidFile) ? sendSignal($signaux{$action}) : print "Le service n'est pas démarré.\n"};
-
-sub printusage
-{
-    print "$0 [start|stop]\n";
-    exit 1;
-}
+$action =~ /^(status|stop)$/ && do {(-f $pidFile) ? sendSignal($signaux{$action}) : die "Le service n'est pas démarré.\n"};
 
 sub startDaemon
 {
@@ -66,9 +60,8 @@ sub startDaemon
 
 	eventlog("start","local",$conf{port});
 
-	while(1) # Boucle du daemon
+	while(1)
 	{
-	    # Le 'next if $!{EINTR};' permet de relancer accept s'il a été interrompu par un signal.
 	    accept (CLIENT, SERVEUR)
 		or do {next if $!{EINTR}; die "accept ($!)";};
 	    
@@ -78,21 +71,19 @@ sub startDaemon
 	    if ($pid == 0) # Ouvrier
 	    {
 
-		senderror(503) unless $nbOuvriers < $conf{clients};
+		senderror(503) unless scalar keys %children < $conf{clients};
 
 		autoflush CLIENT 1;
  		autoflush STDOUT 1;
 		
-		# Récupération de l'ip et du port client
+		# Récupération de l'ip du client
 		$sockaddr = getpeername CLIENT;
-		($clientPort, $clientIp) = unpack_sockaddr_in $sockaddr;
-		$clientIp = inet_ntoa $clientIp;
+		($port_client, $ip_client) = unpack_sockaddr_in $sockaddr;
+		$ip_client = inet_ntoa $ip_client;
 
-#		print STDOUT "IP : $clientIp Port : $clientPort\n";
- 
 		my @req = acceptrequest();
 
-
+		
 
 		okMessage(@req);
 
@@ -101,8 +92,7 @@ sub startDaemon
 	    else # Répartiteur
 	    {
 		$nbRequetesTraitees ++;
-		$nbOuvriers ++;
-
+		$children{$pid} = 1;
 		close (CLIENT);
 	    }
 
@@ -123,16 +113,12 @@ sub startDaemon
     }
 }
 
-# Log la chaîne passée en paramètre
 sub eventlog
 {
-    ($type, $machine, $requete, $projection, $reponse) = @_;
-
     open(LOG_FILE, ">>$conf{logfile}")
 	or die "open $!";
 
-#    print LOG_FILE time,";","$_[0]\n";
-    print LOG_FILE join (";",  time, $type, $machine, $requete, $projection, $reponse,"\n");
+    print LOG_FILE join (";",  time,@_,"\n");
 
     close LOG_FILE;
 }
@@ -149,17 +135,12 @@ sub okMessage
 	print CLIENT "$_\n";
     }
 
-    # print CLIENT "<html>\n".
-    # 	" <body>\n".
-    # 	"  <h1> $_[1] </h1>\n".
-    # 	" </body>\n".
-    # 	"</html>";
 }
 
 sub sendstatus
 {
     print CLIENT "HTTP/1.1 $_[0] $reason_phrases{$_[0]}".$EOR;
-    eventlog("get", $clientIp, $_[1], $projection, $_[0]);
+    eventlog("get", $ip_client, $_[1], $projection, $_[0]);
 }
 
 # Retourne une page d'erreur au client
@@ -186,10 +167,8 @@ sub senderror
 # suivant le paramètre passé
 sub closeouvrier
 {
-    $nbOuvriers --;
     close(CLIENT);
     close (SERVEUR);
-
     exit $_[0];
 }
 
@@ -222,31 +201,34 @@ sub acceptrequest
 }
 
 sub parse_conf {
-    open (CONF, "comanche.conf")
-	or die ("open comanche.conf ($!)");
+    open (CONF, "$confFile")
+	or die ("open ($!)");
 
-    foreach (<CONF>) {
-	if (/^set/){
-	    $_ =~ /^set\s([^\s]*)\s([^\s]*)/;
+    while (<CONF>) {
+	if (/^\s*(#|$)/)
+	{next}
+	elsif (/^\s*set\s*([^\s#]*)\s*([^\s#]*)\s*(#.*|$)/)
+	{
 	    $conf{$1} = $2;
 	}
-	
-	if (/^route/){
-	    $_ =~ /^route\s([^\s]*)\sto\s([^\s]*)/;
-	#    verifier_fichier($2);
-	    push(@relative_route,$1);
-	    push(@absolute_route,$2);
+	elsif (/^\s*route\s*([^\s#]*)\s*to\s*([^\s#]*)\s*(#.*|$)/)
+	{
+	    push(@proj_type,"stat");
+	    push(@relative_path,$1);
+	    push(@absolute_path,$2);
 	}
-
-	if(/^exec/) {
-	    $_ =~ /^exec\s([^\s]*)\sfrom\s([^\s]*)/;
-	#    verifier_fichier($2);
-	    push(@relative_exec,$1);
-	    push(@absolute_exec,$2);
+	elsif(/^exec\s*([^\s#]*)\s*from\s*([^\s#]*)\s*(#.*|$)/)
+	{
+	    push(@proj_type,"dyn");
+	    push(@relative_path,$1);
+	    push(@absolute_path,$2);
 	}
-
+	else
+	{
+	    chomp($_);
+	    die ("$confFile : erreur de syntaxe ligne $. : '$_'\n");
+	}
     }
-
     close(CONF);
 }
 
@@ -273,17 +255,22 @@ sub sendSignal
 
 sub FOSSOYEUR{
     local $!;
-    my $child;
+    my $pid;
 
-    while (($child = waitpid (-1, &WNOHANG)) > 0 ){
-	$nbOuvriers --;
+    while (($pid = waitpid (-1, &WNOHANG)) > 0 )
+    {
+	delete $children{$pid};
     }
+
     $SIG{CHLD} = \&FOSSOYEUR;
 }
 
 sub PRINTSTATUS
 {
-    print STDOUT "status !\n";
+    @ouvriers = keys %children;
+    print STDOUT "PID du daemon : $$\n".
+	"Requêtes - reçues:\n".
+	scalar @ouvriers." ouvriers actifs : (@ouvriers)\n";
 }
 
 
