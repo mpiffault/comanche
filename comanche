@@ -91,15 +91,21 @@ sub startDaemon
 		
 		@res = getressource($req[1]);
 
-	        $rep = construirereponse(@res);
+#		print STDOUT "res0: $res[0] res1: $res[1]\n"; # DEBUG
+
+	        @rep = construirereponse(@res);
 		
-		if ($rep)
+#		print STDOUT "rep : ",@rep,"\n"; # DEBUG
+
+		if (defined @rep)
 		{
-		    sendstatus(200, $req[0]);
-		    print CLIENT $rep;
+#		    print STDOUT "rep OK !\n"; # DEBUG
+		    sendstatus(200, $req[0], $rep[0]);
+		    print CLIENT $rep[1];
 		}
 		else
 		{
+#		    print STDOUT "rep PAS OK !\n"; # DEBUG
 		    senderror(404, $req[0]);
 		}
 
@@ -129,38 +135,103 @@ sub startDaemon
     }
 }
 
+# Param : requête (chemin relatif demandé)
+# Retourne : tableau {ressource locale , type (stat ou dyn)}
+# ou undef si aucune correpondance n'est trouvée.
+sub getressource
+{
+    my ($ressource, $type);
+
+    $ressource = $_[0];
+
+    foreach (0..$#relative_path)
+    {
+	if ($ressource =~ m{$relative_path[$_]})
+	{
+	    $nom_res = $1;
+
+	    # Faute de mieux, on remplace \1 par ce qui match
+	    $ressource = $absolute_path[$_] =~ s{\\1}{$nom_res}r;
+	    
+	    $type = $proj_type[$_];
+	    return ($ressource, $type);
+	}
+    }
+    return undef;
+}
+
 # Prend en paramètre (ressource, type)
 sub construirereponse
 {
-    my $reponse;
+    my $header_infos;
+    my $contenu;
 
     if (defined $_[0])
     {
-	my $ressource = $_[0];
+	my ($ressource, $type) = @_;
+	my $mime;
 
-	
-	# TODO page de liens si pas d'index
-	if (-d $ressource)
+	if (-f $ressource)
+	{
+	    ($mime, $contenu) = lireressource($ressource, $type);
+	}
+	elsif (-d $ressource)
 	{
 	    local $/ = "/";
-
 	    chomp($ressource);
-	    $ressource = $ressource."/".$conf{index};
+	    local $/ = "\n";
+
+	    if (-f $ressource."/".$conf{index})
+	    {
+		$projection = $ressource."/".$conf{index};
+		($mime, $contenu) = lireressource($projection, $type);
+	    }
+	    else
+	    {
+		$mime = "text/html";
+		# TODO
+		$contenu = lister($ressource);
+	    }
 	}
 
-	return undef if (! -f $ressource);
+	# lireressource() retourne undef si le type mime est invalide
+	return undef if (! $contenu);
 
-	if ($_[1] eq "stat")
-	{
-	    $reponse = lirefichier($ressource);
-	}
-	else
-	{
-	    $reponse = `$ressource`;
-	}
+	$header_infos = "Content-Type: ".$mime;
+	
+	return ($header_infos, $contenu);
     }
+    return undef;
+}
 
-    return $reponse;
+# Retourne le résultat (statique ou dynamique) d'une ressource
+# Param : chemin d'un fichier existant
+sub lireressource
+{
+    my ($ressource, $type) = @_;
+    
+    my ($mime, $contenu);
+
+    if ($type eq "stat")
+    {
+	$mime = mimetype($ressource);
+
+	return undef if (! $mime =~ m{((text/(plain|html))|(image(jpeg|pjpeg)))});
+
+	open (FICHIER, "<", $ressource);
+	while (<FICHIER>)
+	{
+	    $contenu .= $_;
+	}
+	close (FICHIER);
+    }
+    else
+    {
+	# TODO vraie gestion de la convention CGI
+	$mime = "text/html";
+	$contenu = `$ressource`;
+    }
+    return ($mime, $contenu);
 }
 
 # Ecrit dans le fichier de log
@@ -175,11 +246,12 @@ sub eventlog
     close LOG_FILE;
 }
 
-# Param : (statuscode, requete)
+# Param : (statuscode, requete, Infos header)
 sub sendstatus
-{
-    
-    print CLIENT "HTTP/1.1 $_[0] $reason_phrases{$_[0]}".$EOR;
+{    
+    print CLIENT "HTTP/1.1 $_[0] $reason_phrases{$_[0]}".$EOL.
+	"$_[2]".$EOR;
+
     eventlog("get", $ip_client, $_[1], $projection, $_[0]);
 }
 
@@ -204,22 +276,6 @@ sub senderror
     closeouvrier(1);
 }
 
-# Retourne le contenu d'un fichier
-# Param : chemin d'un fichier existant
-sub lirefichier
-{
-    my $contenu;
-
-    open (FICHIER, "<", $_[0]);
-    while (<FICHIER>)
-    {
-	$contenu .= $_;
-    }
-    close (FICHIER);
-
-    return $contenu;
-}
-
 # Termine l'ouvrier avec un code de retour
 # suivant le paramètre passé
 sub closeouvrier
@@ -232,8 +288,6 @@ sub closeouvrier
 # Filtre le header de la requete client
 # Si la requête est mal formée, retourne un message d'erreur au client,
 # sinon retourne un tableau contenant la ligne de requete et la ressource demandée
-# BUG : la ligne Host:... peut être à n'importe quelle position
-# après la première ligne. Erreur avec wget par exemple.
 sub acceptrequest
 {
     # regex meta = {}[]()^$.|*+?\
@@ -261,39 +315,6 @@ sub acceptrequest
 	    senderror(400, $req[0]);
 	}
     }
-
-
-#   while(<CLIENT> !~ /(?i)^host:\s*[^\s]*\s*\r?\n/){}
-    # <CLIENT> =~ /(?i)^host:\s*[^\s]*\s*\r?\n/
-    # 	or senderror(400, $req[0]);
-
-    # while(<CLIENT> !~ /^\r?\n/)
-    # {}
-
-    # return @req;
-}
-
-# Param : requête (chemin relatif demandé)
-# Retourne : tableau {ressource locale , type (stat ou dyn)}
-# ou undef si aucune correpondance n'est trouvée.
-sub getressource
-{
-    my @res;
-    $res[0] = $_[0];
-
-    foreach (0..$#relative_path)
-    {
-	if ($res[0] =~ m{$relative_path[$_]})
-	{
-	    $nom_res = $1;
-
-	    $res[0] = $absolute_path[$_] =~ s{\\1}{$nom_res}r;
-	    
-	    $res[1] = $proj_type[$_];
-	    return @res;
-	}
-    }
-    return undef;
 }
 
 # Lit et charge la configuration de $confFile
