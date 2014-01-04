@@ -216,7 +216,10 @@ sub lireressource
     {
 	$mime = mimetype($ressource);
 
-	return undef if (! $mime =~ m{((text/(plain|html))|(image(jpeg|pjpeg)))});
+#	print STDOUT $mime."\n";
+	
+	return undef if ($mime !~ m{((text/(plain|html))|(image/(jpeg|pjpeg)))});
+#	print STDOUT $mime."\n" if ($mime !~ m{((text/(plain|html))|(image/(jpeg|pjpeg)))});
 
 	open (FICHIER, "<", $ressource);
 	while (<FICHIER>)
