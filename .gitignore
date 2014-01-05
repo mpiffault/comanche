@@ -2,10 +2,11 @@
 *
 
 # sauf ce qui suit
+!.gitignore
 !comanche
 !comanche.conf
 !README.md
-!.gitignore
+!testnc/
 !testnc/*
+!pages_test
 !pages_test/*
-!pages_test/images/*

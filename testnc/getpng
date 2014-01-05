@@ -1,0 +1,4 @@
+GET /test/images/qrcode.png HTTP/1.1
+Host:
+
+
