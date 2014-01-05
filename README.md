@@ -76,5 +76,6 @@ La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé 
 
 ### BUG
 
-    * Code de retour 200 quel que soit la réponse...
-    * La commande status écrit sur la sortie standard du terminal où il a été démarré.
+- Code de retour 200 quel que soit la réponse...
+     
+- La commande status écrit sur la sortie standard du terminal où il a été démarré.
