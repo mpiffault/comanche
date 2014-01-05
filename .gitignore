@@ -1,5 +1,11 @@
+# on ignore tout
 *
+
+# sauf ce qui suit
 !comanche
 !comanche.conf
 !README.md
 !.gitignore
+!testnc/*
+!pages_test/*
+!pages_test/images/*

@@ -86,21 +86,20 @@ sub startDaemon
 		($port_client, $ip_client) = unpack_sockaddr_in $sockaddr;
 		$ip_client = inet_ntoa $ip_client;
 
-		my @req = acceptrequest();
+		my ($requete, $ressource) = acceptrequest();
 		
-		
-		@res = getressource($req[1]);
+		my ($ressource_loc, $ressource_type) = getressource($ressource);
 
 #		print STDOUT "res0: $res[0] res1: $res[1]\n"; # DEBUG
 
-	        @rep = construirereponse(@res);
+	        @rep = construirereponse($ressource_loc, $ressource_type , $ressource);
 		
 #		print STDOUT "rep : ",@rep,"\n"; # DEBUG
 
 		if (defined @rep)
 		{
 #		    print STDOUT "rep OK !\n"; # DEBUG
-		    sendstatus(200, $req[0], $rep[0]);
+		    sendstatus(200, $requete, $rep[0]);
 		    print CLIENT $rep[1];
 		}
 		else
@@ -166,7 +165,7 @@ sub construirereponse
     my $header_infos;
     my $contenu;
 
-    if (defined $_[0])
+    if (defined @_)
     {
 	my ($ressource, $type) = @_;
 	my $mime;
@@ -237,6 +236,11 @@ sub lireressource
     return ($mime, $contenu);
 }
 
+sub lister
+{
+    return "<html><body><h1></h1></body></html>\n";
+}
+
 # Ecrit dans le fichier de log
 # Param : (type, machine, (port|requete), projection, statuscode)
 sub eventlog
@@ -296,15 +300,13 @@ sub acceptrequest
     # regex meta = {}[]()^$.|*+?\
     autoflush CLIENT 1;
 
-    my @req;
-
     <CLIENT> =~ /(?i)(^((?-i)GET)\s+(\/[^\s]*)\s+HTTP\/1\.1)\r?\n/
 	or senderror(400);
 
     # requête
-    $req[0] = $1;
+    my $requete = $1;
     # ressource
-    $req[1] = $3;
+    my $ressource = $3;
 
     my $ok;
     while(1)
@@ -314,8 +316,8 @@ sub acceptrequest
 
 	if ($ligne =~ /^\r?\n/)
 	{
-	    return @req if $ok;
-	    senderror(400, $req[0]);
+	    return ($requete, $ressource) if $ok;
+	    senderror(400, $requete);
 	}
     }
 }
