@@ -30,6 +30,9 @@ comanche start
 Pour l'arrêter
 comanche stop
 
+Pour connaître son état
+comanche status
+
 ### CONFIGURATION
 
 La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé dans le même répertoire que comanche. La syntaxe attendue y est la suivante (configuration type) :
@@ -64,11 +67,14 @@ La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé 
 ### TODO
 
 -    Application
-     * Implémentation de la comande 'status' qui doit renvoyer l'état du serveur.
-     * Gestion plus fine des ouvriers (enregistrement de leur pid, nombre depuis le démarrage du serveur)
-     * Log des événement de démarrage et d'arrêt
+     * Fonction lister répertoire
+     * Gestion de la norme CGI
 
 -    Dialogue réseau
-     * Implémentation de la réponse à la requète (réponse par défaut pour l'instant) comprend notament la gestion des routes, l'ouverture, la lecture et l'envoi au client du contenu du fichier
-     * Gestion des fichier text, html et jpg
-     * Gestion des cgi
+     * Envoi de la page par défaut pour une réponse 404
+
+
+### BUG
+
+    * Code de retour 200 quel que soit la réponse...
+    * La commande status écrit sur la sortie standard du terminal où il a été démarré.
