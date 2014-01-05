@@ -78,4 +78,3 @@ La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé 
 
 - La commande status écrit sur la sortie standard du terminal où il a été démarré.
 
-- Ne retourne pas la page par défaut si on demande la racine
