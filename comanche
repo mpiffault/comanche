@@ -239,9 +239,46 @@ sub lireressource
     return ($mime, $contenu);
 }
 
+
+# Param : ($dossier_local, $dossier_relatif)
+# Retourne la liste du dossier sous la forme d'une page html
+# contenant des liens relatif
+# BUG : ne détecte pas si c'est un dossier.
 sub lister
 {
-    return "<html><body><h1></h1></body></html>\n";
+    my ($dossier_local, $dossier_relatif) = @_;
+
+    my $head_html = 
+	"<!DOCTYPE HTML PUBLIC '-//IETF//DTD HTML 2.0//EN'>\n"
+	."<html>\n"
+	."  <head>\n"
+	."    <title> Liste du dossier local </title>\n"
+	."    <meta http-equiv='Content-Type' content='text/html; charset=utf-8' />\n"
+	."  </head>\n"
+	."  <body>\n"
+	."    <h1>Liste des fichiers</h1>\n";
+
+    my $foot_html = "  </body>\n</html>";
+
+    my $contenu =  "";
+
+    opendir(REP,"$dossier_local") or die "Impossible d'ouvrir : $dossier_local";
+    my @liste = readdir(REP);
+    @liste = grep {$_ ne "."} @liste;
+    @liste = grep {$_ ne ".."} @liste;
+    closedir REP;
+
+    $contenu .= "      <ul>\n";
+    foreach my $i (@liste) {
+	if (-d $i) {
+	    $contenu .= "       <li><img src='/img/dossier.jpg'><a href=\"$dossier_relatif$i\"> $i/</a></li>\n";
+	}else{
+	    $contenu .= "       <li><img src='/img/fichier.jpg'><a href=\"$dossier_relatif$i\"> $i</a></li>\n";
+	}
+    }
+    $contenu .= "      </ul>\n";
+
+    return $head_html.$contenu.$foot_html;
 }
 
 # Ecrit dans le fichier de log

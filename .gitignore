@@ -10,3 +10,5 @@
 !testnc/*
 !pages_test
 !pages_test/*
+!img/
+!img/*
