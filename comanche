@@ -168,29 +168,29 @@ sub construirereponse
 
     if (defined @_)
     {
-	my ($ressource, $type) = @_;
+	my ($ressource_loc, $type, $ressource_rel) = @_;
 	my $mime;
 
-	if (-f $ressource)
+	if (-f $ressource_loc)
 	{
-	    ($mime, $contenu) = lireressource($ressource, $type);
+	    ($mime, $contenu) = lireressource($ressource_loc, $type);
 	}
-	elsif (-d $ressource)
+	elsif (-d $ressource_loc)
 	{
 	    local $/ = "/";
-	    chomp($ressource);
+	    chomp($ressource_loc);
 	    local $/ = "\n";
 
-	    if (-f $ressource."/".$conf{index})
+	    if (-f $ressource_loc."/".$conf{index})
 	    {
-		$projection = $ressource."/".$conf{index};
+		$projection = $ressource_loc."/".$conf{index};
 		($mime, $contenu) = lireressource($projection, $type);
 	    }
 	    else
 	    {
 		$mime = "text/html";
 		# TODO
-		$contenu = lister($ressource);
+		$contenu = lister($ressource_loc, $ressource_rel);
 	    }
 	}
 
