@@ -27,13 +27,16 @@ S'assurer qu'un fichier comanche.conf correctement écrit (cf. CONFIGURATION) es
 comanche fonctionne comme un daemon:
 
 Pour démarrer le serveur
-comanche start
+
+    comanche start
 
 Pour l'arrêter
-comanche stop
+
+    comanche stop
 
 Pour connaître son état
-comanche status
+
+    comanche status
 
 ### CONFIGURATION
 
