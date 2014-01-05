@@ -72,7 +72,6 @@ La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé 
 ### TODO
 
 -    Application
-     * Fonction lister répertoire
      * Gestion de la norme CGI
 
 
