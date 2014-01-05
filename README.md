@@ -11,7 +11,9 @@ Martin Piffault
 
 ### AVERTISSEMENT
 
-Work in progress : ce morceau de code n'est pas encore fonctionnel...
+Work in progress :
+
+Il manque quelques petites choses, mais ça fonctionne déjà pas trop mal
 
 ### DESCRIPTION
 
