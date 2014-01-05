@@ -20,6 +20,7 @@ $pidFile = ".comanche.pid";
     200, "OK",
     400, "Bad Request",
     404, "Not Found",
+    501, "Not Implemented",
     503, "Service Unavailable"
     );
 
@@ -205,6 +206,7 @@ sub construirereponse
 }
 
 # Retourne le résultat (statique ou dynamique) d'une ressource
+# Retourne une erreur 501 Not Implemented si le mime n'est pas suporté
 # Param : chemin d'un fichier existant
 sub lireressource
 {
@@ -218,7 +220,7 @@ sub lireressource
 
 #	print STDOUT $mime."\n";
 	
-	return undef if ($mime !~ m{((text/(plain|html))|(image/(jpeg|pjpeg)))});
+	senderror(501) if ($mime !~ m{((text/(plain|html))|(image/(jpeg|pjpeg)))});
 #	print STDOUT $mime."\n" if ($mime !~ m{((text/(plain|html))|(image/(jpeg|pjpeg)))});
 
 	open (FICHIER, "<", $ressource);
@@ -254,32 +256,50 @@ sub eventlog
     close LOG_FILE;
 }
 
-# Param : (statuscode, requete, Infos header)
+
+# Param : (statuscode, requete, header_infos)
 sub sendheader
 {    
-    print CLIENT "HTTP/1.1 $_[0] $reason_phrases{$_[0]}".$EOL.
-	"$_[2]".$EOR;
+    my ($status_code, $requete, $header_infos) = @_;
 
-    eventlog("get", $ip_client, $_[1], $projection, $_[0]);
+    print CLIENT "HTTP/1.1 $status_code $reason_phrases{$status_code}".$EOL.
+	"$header_infos".$EOR;
+
+    eventlog("get", $ip_client, "$requete", "$projection", $status_code);
+}
+
+sub liredefault
+{
+    return lireressource($conf{default}, "stat");
 }
 
 # Envoi une page d'erreur au client et ferme la connection
 # Param : (statuscode, requete)
 sub senderror
 {
-    my $stat_code = $_[0];
-    my $requete = $_[1];
+    my ($stat_code, $requete) = @_;
 
-    sendheader($stat_code, $requete);
+    my ($mime, $contenu);
 
-    print CLIENT "<html>\n".
-	" <head>\n".
-	"  <title>$stat_code $reason_phrases{$stat_code}</title>\n".
-	" </head>\n".
-	" <body>\n".
-	"  <h1>$reason_phrases{$stat_code}</h1>\n".
-	" </body>\n".
-	"</html>\n";
+    if ($stat_code == 404)
+    {
+	($mime, $contenu) = liredefault();
+    }
+    else
+    {	
+	$mime = "text/html";
+	$contenu = "<html>\n".
+	    " <head>\n".
+	    "  <title>$stat_code $reason_phrases{$stat_code}</title>\n".
+	    " </head>\n".
+	    " <body>\n".
+	    "  <h1>$reason_phrases{$stat_code}</h1>\n".
+	    " </body>\n".
+	    "</html>\n";
+    }
+
+    sendheader($stat_code, $requete, "Content-Type: ".$mime);
+    print CLIENT $contenu;
 
     closeouvrier(1);
 }

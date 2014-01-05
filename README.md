@@ -70,9 +70,6 @@ La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé 
      * Fonction lister répertoire
      * Gestion de la norme CGI
 
--    Dialogue réseau
-     * Envoi de la page par défaut pour une réponse 404
-
 
 ### BUG
 
