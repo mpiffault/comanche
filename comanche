@@ -86,21 +86,22 @@ sub startDaemon
 		($port_client, $ip_client) = unpack_sockaddr_in $sockaddr;
 		$ip_client = inet_ntoa $ip_client;
 
-		my ($requete, $ressource) = acceptrequest();
+		my ($requete, $ressource_rel) = acceptrequest();
 		
-		my ($ressource_loc, $ressource_type) = getressource($ressource);
+		my ($ressource_loc, $ressource_type) = getressource($ressource_rel);
 
 #		print STDOUT "res0: $res[0] res1: $res[1]\n"; # DEBUG
 
-	        @rep = construirereponse($ressource_loc, $ressource_type , $ressource);
+	        # @rep = construirereponse($ressource_loc, $ressource_type , $ressource_rel);
+	        my ($header_infos, $contenu) = construirereponse($ressource_loc, $ressource_type , $ressource_rel);
 		
 #		print STDOUT "rep : ",@rep,"\n"; # DEBUG
 
-		if (defined @rep)
+		if ($contenu)
 		{
 #		    print STDOUT "rep OK !\n"; # DEBUG
-		    sendstatus(200, $requete, $rep[0]);
-		    print CLIENT $rep[1];
+		    sendheader(200, $requete, $header_infos);
+		    print CLIENT $contenu;
 		}
 		else
 		{
@@ -139,21 +140,21 @@ sub startDaemon
 # ou undef si aucune correpondance n'est trouvée.
 sub getressource
 {
-    my ($ressource, $type);
+    my ($ressource_rel, $ressource_loc, $type);
 
-    $ressource = $_[0];
+    $ressource_rel = $_[0];
 
     foreach (0..$#relative_path)
     {
-	if ($ressource =~ m{$relative_path[$_]})
+	if ($ressource_rel =~ m{$relative_path[$_]})
 	{
-	    $nom_res = $1;
+	    my $nom_res = $1;
 
 	    # Faute de mieux, on remplace \1 par ce qui match
-	    $ressource = $absolute_path[$_] =~ s{\\1}{$nom_res}r;
-	    
+	    $ressource_loc = $absolute_path[$_] =~ s{\\1}{$nom_res}r;
 	    $type = $proj_type[$_];
-	    return ($ressource, $type);
+
+	    return ($ressource_loc, $type);
 	}
     }
     return undef;
@@ -254,7 +255,7 @@ sub eventlog
 }
 
 # Param : (statuscode, requete, Infos header)
-sub sendstatus
+sub sendheader
 {    
     print CLIENT "HTTP/1.1 $_[0] $reason_phrases{$_[0]}".$EOL.
 	"$_[2]".$EOR;
@@ -269,7 +270,7 @@ sub senderror
     my $stat_code = $_[0];
     my $requete = $_[1];
 
-    sendstatus($stat_code, $requete);
+    sendheader($stat_code, $requete);
 
     print CLIENT "<html>\n".
 	" <head>\n".
