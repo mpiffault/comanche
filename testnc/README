@@ -1,0 +1,3 @@
+A utiliser comme ceci :
+
+nc localhost 8080 < getpage
