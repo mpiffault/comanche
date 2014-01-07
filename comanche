@@ -88,26 +88,23 @@ sub startDaemon
 		$ip_client = inet_ntoa $ip_client;
 
 		my ($requete, $ressource_rel) = acceptrequest();
-		
+
 		my ($ressource_loc, $ressource_type) = getressource($ressource_rel);
 
-#		print STDOUT "res0: $res[0] res1: $res[1]\n"; # DEBUG
+		# Pour Log d'une 501 en attente d'une meilleure solution
+		$requete_globale = $requete;
+		$ressource_loc_glob = $ressource_loc;
 
-	        # @rep = construirereponse($ressource_loc, $ressource_type , $ressource_rel);
 	        my ($header_infos, $contenu) = construirereponse($ressource_loc, $ressource_type , $ressource_rel);
-		
-#		print STDOUT "rep : ",@rep,"\n"; # DEBUG
 
 		if ($contenu)
 		{
-#		    print STDOUT "rep OK !\n"; # DEBUG
-		    sendheader(200, $requete, $header_infos);
+		    sendheader(200, $requete, $header_infos, $ressource_type, $ressource_loc);
 		    print CLIENT $contenu;
 		}
 		else
 		{
-#		    print STDOUT "rep PAS OK !\n"; # DEBUG
-		    senderror(404, $req[0]);
+		    senderror(404, $requete, $ressource_type);
 		}
 
 		closeouvrier(0);
@@ -190,7 +187,6 @@ sub construirereponse
 	    else
 	    {
 		$mime = "text/html";
-		# TODO
 		$contenu = lister($ressource_loc, $ressource_rel);
 	    }
 	}
@@ -214,14 +210,11 @@ sub lireressource
     
     my ($mime, $contenu);
 
-    if ($type eq "stat")
+    if ($type eq "get-s")
     {
 	$mime = mimetype($ressource);
 
-#	print STDOUT $mime."\n";
-	
-	senderror(501) if ($mime !~ m{((text/(plain|html))|(image/(jpeg|pjpeg)))});
-#	print STDOUT $mime."\n" if ($mime !~ m{((text/(plain|html))|(image/(jpeg|pjpeg)))});
+	senderror(501, $requete_globale, "get-s") if ($mime !~ m{((text/(.*))|(image/(jpeg|pjpeg)))});
 
 	open (FICHIER, "<", $ressource);
 	while (<FICHIER>)
@@ -240,10 +233,10 @@ sub lireressource
 }
 
 
-# Param : ($dossier_local, $dossier_relatif)
 # Retourne la liste du dossier sous la forme d'une page html
 # contenant des liens relatif
-# BUG : ne détecte pas si c'est un dossier.
+# Param : ($dossier_local, $dossier_relatif)
+# Param : ($dossier_local, $dossier_relatif)
 sub lister
 {
     my ($dossier_local, $dossier_relatif) = @_;
@@ -297,27 +290,27 @@ sub eventlog
 }
 
 
-# Param : (statuscode, requete, header_infos)
+# Param : (statuscode, requete, header_infos, type_ressource, projection)
 sub sendheader
 {    
-    my ($status_code, $requete, $header_infos) = @_;
+    my ($status_code, $requete, $header_infos, $type_ressource, $projection) = @_;
 
     print CLIENT "HTTP/1.1 $status_code $reason_phrases{$status_code}".$EOL.
 	"$header_infos".$EOR;
 
-    eventlog("get", $ip_client, "$requete", "$projection", $status_code);
+    eventlog($type_ressource, $ip_client, "$requete", "$projection", $status_code);
 }
 
 sub liredefault
 {
-    return lireressource($conf{default}, "stat");
+    return lireressource($conf{default}, "get-s");
 }
 
 # Envoi une page d'erreur au client et ferme la connection
-# Param : (statuscode, requete)
+# Param : (statuscode, requete, ressource_type)
 sub senderror
 {
-    my ($stat_code, $requete) = @_;
+    my ($stat_code, $requete, $ressource_type) = @_;
 
     my ($mime, $contenu);
 
@@ -338,7 +331,7 @@ sub senderror
 	    "</html>\n";
     }
 
-    sendheader($stat_code, $requete, "Content-Type: ".$mime);
+    sendheader($stat_code, $requete, "Content-Type: ".$mime, $ressource_type);
     print CLIENT $contenu;
 
     closeouvrier(1);
@@ -399,14 +392,14 @@ sub parse_conf {
 
 	elsif (/^\s*route\s*([^\s#]*)\s*to\s*([^\s#]*)\s*(#.*|$)/)
 	{
-	    push(@proj_type,"stat");
+	    push(@proj_type,"get-s");
 	    push(@relative_path,$1);
 	    push(@absolute_path,$2);
 	}
 
 	elsif (/^\s*exec\s*([^\s#]*)\s*from\s*([^\s#]*)\s*(#.*|$)/)
 	{
-	    push(@proj_type,"dyn");
+	    push(@proj_type,"get-d");
 	    push(@relative_path,$1);
 	    push(@absolute_path,$2);
 	}
