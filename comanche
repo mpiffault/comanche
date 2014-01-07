@@ -63,7 +63,7 @@ sub startDaemon
 	listen (SERVEUR, SOMAXCONN)
 	    or die "listen ($!)";
 
-	eventlog("start","local",$conf{port});
+	eventlog("start", "local", $conf{port}, $conf{basedir});
 
 	while(1)
 	{
@@ -468,6 +468,6 @@ sub STOPDAEMON
 {
     while(wait > 0){}
     close (SERVEUR);
-    eventlog("stop","local",$conf{port});
+    eventlog("stop", "local", $conf{port}, $conf{basedir});
     exit 0;
 }
