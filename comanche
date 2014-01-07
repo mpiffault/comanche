@@ -269,13 +269,16 @@ sub lister
     closedir REP;
 
     $contenu .= "      <ul>\n";
+
     foreach my $i (@liste) {
-	if (-d $i) {
-	    $contenu .= "       <li><img src='/img/dossier.jpg'><a href=\"$dossier_relatif$i\"> $i/</a></li>\n";
+
+	if (-d $dossier_local."/".$i) {
+	    $contenu .= "       <li><img src='/img/dossier.jpg'><a href=\"$dossier_relatif$i/\"> $i/</a></li>\n";
 	}else{
 	    $contenu .= "       <li><img src='/img/fichier.jpg'><a href=\"$dossier_relatif$i\"> $i</a></li>\n";
 	}
     }
+
     $contenu .= "      </ul>\n";
 
     return $head_html.$contenu.$foot_html;
