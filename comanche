@@ -71,13 +71,17 @@ sub startDaemon
 	    accept (CLIENT, SERVEUR)
 		or do {next if $!{EINTR}; die "accept ($!)";};
 	    
+	    $recues++;
+
+	    senderror(503) unless scalar keys %children < $conf{clients};
+
+	    $traitees++;
+
 	    defined($pid = fork)
 		or die "Fork impossible : $!";
 
 	    if ($pid == 0) # Ouvrier
 	    {
-
-		senderror(503) unless scalar keys %children < $conf{clients};
 
 		autoflush CLIENT 1;
  		autoflush STDOUT 1;
@@ -90,6 +94,7 @@ sub startDaemon
 		my ($requete, $ressource_rel) = acceptrequest();
 
 		my ($ressource_loc, $ressource_type) = getressource($ressource_rel);
+		$ressource_loc = $conf{basedir}."/".$ressource_loc;
 
 		# Pour Log d'une 501 en attente d'une meilleure solution
 		$requete_globale = $requete;
@@ -385,7 +390,7 @@ sub parse_conf {
 	if (/^\s*(#|$)/)
 	{next}
 
-	elsif (/^\s*set\s*(port|default|index|logfile|clients)\s*([^\s#]*)\s*(#.*|$)/)
+	elsif (/^\s*set\s*(port|default|index|logfile|clients|basedir)\s*([^\s#]*)\s*(#.*|$)/)
 	{
 	    $conf{$1} = $2;
 	}
