@@ -78,4 +78,3 @@ La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé 
 ### BUG
 
 - La commande status écrit sur la sortie standard du terminal où il a été démarré.
-
