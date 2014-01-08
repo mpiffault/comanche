@@ -145,7 +145,7 @@ sub getressource
 {
     my ($ressource_rel, $ressource_loc, $type);
 
-    $ressource_rel = $_[0];
+    ($ressource_rel) = @_;
 
     foreach (0..$#relative_path)
     {
@@ -271,9 +271,9 @@ sub lister
     foreach my $i (@liste) {
 
 	if (-d $dossier_local."/".$i) {
-	    $contenu .= "       <li><img src='/img/dossier.jpg'><a href=\"$dossier_relatif$i/\"> $i/</a></li>\n";
+	    $contenu .= "       <li><img src='/img/dossier.jpg' alt='[d]'><a href=\"$dossier_relatif$i/\"> $i/</a></li>\n";
 	}else{
-	    $contenu .= "       <li><img src='/img/fichier.jpg'><a href=\"$dossier_relatif$i\"> $i</a></li>\n";
+	    $contenu .= "       <li><img src='/img/fichier.jpg' alt=[f]><a href=\"$dossier_relatif$i\"> $i</a></li>\n";
 	}
     }
 
@@ -422,10 +422,11 @@ sub parse_conf {
 # Param : signal à envoyer
 sub sendSignal
 {
+    ($signal) = @_;
     open(PID_FILE, "<", $pidFile)
 	or die ("open $!");
     $daemonPid = <PID_FILE>;
-    kill "$_[0]" => $daemonPid;
+    kill "$signal" => $daemonPid;
     close PID_FILE;
 
     # attente de la fin du daemon et supression du fichier $pidFile
@@ -433,6 +434,8 @@ sub sendSignal
     {
 	while (kill 0 => $daemonPid) {print "."; select(undef,undef,undef,0.5);}
 	print "stopped\n";
+
+	# Supression du fichier pid
 	unlink($pidFile);
     }
 
