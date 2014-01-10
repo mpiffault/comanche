@@ -238,6 +238,8 @@ sub lireressource
     else
     {
 	# TODO vraie gestion de la convention CGI
+	print "".$GLOBAL{ress_loc}."\n";
+
 	$GLOBAL{ress_loc} =~ m{\?(.*)};
 	$ENV{QUERY_STRING} = $1;
 	# $ENV{QUERY_STRING} = $GLOBAL{requete};
