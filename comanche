@@ -16,6 +16,8 @@ $pidFile = ".comanche.pid";
 @relative_path;
 @absolute_path;
 
+%GLOBAL;
+
 %reason_phrases = (
     200, "OK",
     400, "Bad Request",
@@ -97,8 +99,8 @@ sub startDaemon
 		$ressource_loc = $conf{basedir}."/".$ressource_loc;
 
 		# Pour Log d'une 501 en attente d'une meilleure solution
-		$requete_globale = $requete;
-		$ressource_loc_glob = $ressource_loc;
+		$GLOBAL{requete} = $requete;
+		$GLOBAL{ress_loc} = $ressource_loc;
 
 	        my ($header_infos, $contenu) = construirereponse($ressource_loc, $ressource_type , $ressource_rel);
 
@@ -224,7 +226,7 @@ sub lireressource
     {
 	$mime = mimetype($ressource);
 
-	senderror(501, $requete_globale, "get-s") if ($mime !~ m{((text/(.*))|(image/(jpeg|pjpeg)))});
+	senderror(501, $GLOBAL{requete}, "get-s") if ($mime !~ m{((text/(.*))|(image/(jpeg|pjpeg)))});
 
 	open (FICHIER, "<", $ressource);
 	while (<FICHIER>)
@@ -236,9 +238,9 @@ sub lireressource
     else
     {
 	# TODO vraie gestion de la convention CGI
-	$ressource_loc_glob =~ m{\?(.*)};
+	$GLOBAL{ress_loc} =~ m{\?(.*)};
 	$ENV{QUERY_STRING} = $1;
-	# $ENV{QUERY_STRING} = $requete_globale;
+	# $ENV{QUERY_STRING} = $GLOBAL{requete};
 	
 	print STDOUT $ENV{QUERY_STRING}."\n"; # DEBUG
 
