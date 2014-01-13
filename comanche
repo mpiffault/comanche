@@ -462,6 +462,8 @@ sub FOSSOYEUR{
     local $!;
     my $pid;
 
+    # malgré le fait que le fossoyeur soit appelé par un SIGCHLD,
+    # On utilise quand même le WHNOHANG pour passer le moins de temps possible dans la fonction.
     while (($pid = waitpid (-1, &WNOHANG)) > 0 )
     {
 	delete $children{$pid};
