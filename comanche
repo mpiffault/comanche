@@ -4,7 +4,7 @@ use Socket;
 use POSIX qw(:sys_wait_h strftime);
 use File::MimeInfo;
 
-$ARGV[0] =~ /^(start|stop|status)$/ or die ("$0 [start|stop|status]\n");
+$ARGV[0] =~ /^(start|stop|status|reload)$/ or die ("$0 [start|stop|status|reload]\n");
 $action = $ARGV[0];
 
 $EOL = "\015\012";
@@ -28,13 +28,15 @@ $pidFile = ".comanche.pid";
 
 %signaux = (
     status, "USR1",
-    stop, "USR2"
+    stop, "USR2",
+    reload, "HUP"
     );
 
 # prise en compte des la mort des ouvriers
 $SIG{CHLD} = \&FOSSOYEUR;
 $SIG{$signaux{status}} = \&PRINTSTATUS;
 $SIG{$signaux{stop}} = \&STOPDAEMON;
+$SIG{$signaux{reload}} = \&parse_conf;
 
 $recues = 0;
 $traitees = 0;
@@ -44,7 +46,7 @@ $| = 1;
 
 $action =~ /^start$/ && do {(-f $pidFile) ? die "Une instance de comanche existe déjà.\n" : startDaemon()};
 
-$action =~ /^(status|stop)$/ && do {(-f $pidFile) ? sendSignal($signaux{$action}) : die "Le service n'est pas démarré.\n"};
+$action =~ /^(status|stop|reload)$/ && do {(-f $pidFile) ? sendSignal($signaux{$action}) : die "Le service n'est pas démarré.\n"};
 
 sub startDaemon
 {
@@ -98,8 +100,9 @@ sub startDaemon
 		my ($ressource_loc, $ressource_type) = getressource($ressource_rel);
 		$ressource_loc = $conf{basedir}."/".$ressource_loc;
 
-		# Pour Log d'une 501 en attente d'une meilleure solution
+		# Pour les cgi et le log d'une 501 en attente d'une meilleure solution
 		$GLOBAL{requete} = $requete;
+		$GLOBAL{ress_rel} = $ressource_rel;
 		$GLOBAL{ress_loc} = $ressource_loc;
 
 	        my ($header_infos, $contenu) = construirereponse($ressource_loc, $ressource_type , $ressource_rel);
@@ -219,9 +222,6 @@ sub lireressource
     
     my ($mime, $contenu);
 
-    print $ressource."\n"; # DEBUG
-    print $type."\n"; # DEBUG
-
     if ($type eq "get-s")
     {
 	$mime = mimetype($ressource);
@@ -237,14 +237,11 @@ sub lireressource
     }
     else
     {
-	# TODO vraie gestion de la convention CGI
-	print "".$GLOBAL{ress_loc}."\n";
-
-	$GLOBAL{ress_loc} =~ m{\?(.*)};
+	# On récupère les paramètres de la requête
+	# qu'on affecte à la variable d'environnement $QUERY_STRING
+	$GLOBAL{ress_rel} =~ m{\?(.*)};
 	$ENV{QUERY_STRING} = $1;
-	# $ENV{QUERY_STRING} = $GLOBAL{requete};
-	
-	print STDOUT $ENV{QUERY_STRING}."\n"; # DEBUG
+	# $ENV{REQUEST_URI} = $GLOBAL{ress_rel};
 
 	$mime = "text/html";
 	$contenu = `./$ressource`;
@@ -398,6 +395,14 @@ sub acceptrequest
 
 # Lit et charge la configuration de $confFile
 sub parse_conf {
+
+    my $current_port = $conf{port};
+
+    %conf = undef;
+    @proj_type = undef;
+    @relative_path = undef;
+    @absolute_path = undef;
+
     open (CONF, "$confFile")
 	or die ("open ($!)");
 
@@ -429,6 +434,12 @@ sub parse_conf {
 	    die ("$confFile : erreur de syntaxe ligne $. : '$_'\n");
 	}
     }
+    
+    if (defined $current_port && $conf{port} ne $current_port)
+    {
+	print STDOUT "Attention: commanche doit être redémarré pour prendre en compte la modification du port d'écoute.\n";
+    }
+    
     close(CONF);
 }
 
