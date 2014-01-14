@@ -38,6 +38,9 @@ Pour connaître son état
 
     comanche status
 
+Pour recharger le fichier de configuration
+    comanche reload
+
 ### CONFIGURATION
 
 La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé dans le même répertoire que comanche. La syntaxe attendue y est la suivante (configuration type) :
@@ -72,9 +75,10 @@ La configuration se fait par l'intermédiaire d'un fichier comanche.conf situé 
 ### TODO
 
 -    Application
-     * Gestion de la norme CGI
+     * Fonctionnalités de supervision
+     * Nettoyage du code
 
 
 ### BUG
 
-- La commande status écrit sur la sortie standard du terminal où il a été démarré.
+- La commande status écrit sur la sortie standard du terminal où comanche a été démarré.
