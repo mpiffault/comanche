@@ -4,3 +4,5 @@
 !pages_test/*
 !img/
 !img/*
+!cgi-lib/
+!cgi-lib/*

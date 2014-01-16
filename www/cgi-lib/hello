@@ -1,0 +1,6 @@
+#!/bin/bash
+
+echo "<html><body>"
+echo "<h1>CGI-Hello<h1>"
+echo "<p>Parametres : $QUERY_STRING</p>"
+echo "</body></html>"
