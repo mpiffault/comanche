@@ -74,4 +74,6 @@ E. JOLY a traité la lecture du fichier de configuration, le listage des dossiers
 Autres
 ------
 
+Les fonctionnalités supplémentaires basedir et reload ont été implémentées.
+
 Le projet est sur github : https://github.com/mpiffault avec des dossiers correspondants au fichier de configuration tel qu'il est.
