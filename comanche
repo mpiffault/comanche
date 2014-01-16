@@ -7,6 +7,7 @@ use File::MimeInfo;
 $ARGV[0] =~ /^(start|stop|status|reload)$/ or die ("$0 [start|stop|status|reload]\n");
 $action = $ARGV[0];
 
+# CRLF
 $EOL = "\015\012";
 $EOR = $EOL x 2;
 $confFile = "comanche.conf";
@@ -86,10 +87,9 @@ sub startDaemon
 
 	    if ($pid == 0) # Ouvrier
 	    {
+		select CLIENT;
+		$| = 1;
 
-		autoflush CLIENT 1;
- 		autoflush STDOUT 1;
-		
 		# Récupération de l'ip du client
 		$sockaddr = getpeername CLIENT;
 		($port_client, $ip_client) = unpack_sockaddr_in $sockaddr;
@@ -110,7 +110,7 @@ sub startDaemon
 		if ($contenu)
 		{
 		    sendheader(200, $requete, $header_infos, $ressource_type, $ressource_loc);
-		    print CLIENT $contenu;
+		    print $contenu;
 		}
 		else
 		{
@@ -179,7 +179,7 @@ sub construirereponse
 	my ($ressource_loc, $type, $ressource_rel) = @_;
 	my $mime;
 
-	$ressource_loc =~ m{[^?]*\?(.*)};
+#	$ressource_loc =~ m{[^?]*\?(.*)};
 
 	if (-f $ressource_loc)
 	{
@@ -274,14 +274,19 @@ sub lister
 
     opendir(REP,"$dossier_local") or die "Impossible d'ouvrir : $dossier_local";
     my @liste = readdir(REP);
+
     @liste = grep {$_ ne "."} @liste;
     @liste = grep {$_ ne ".."} @liste;
     closedir REP;
 
     $contenu .= "      <ul>\n";
 
-    foreach my $i (@liste) {
+    if (-d $dossier_local."/.." && $GLOBAL{ress_rel} ne "/")
+    {
+	$contenu .= "       <li><img src='/img/dossier.jpg' alt='[d]'><a href=\"$dossier_relatif../\"> ^-- Niveau supérieur</a></li>\n";
+    }
 
+    foreach my $i (@liste) {
 	if (-d $dossier_local."/".$i) {
 	    $contenu .= "       <li><img src='/img/dossier.jpg' alt='[d]'><a href=\"$dossier_relatif$i/\"> $i/</a></li>\n";
 	}else{
@@ -312,7 +317,7 @@ sub sendheader
 {    
     my ($status_code, $requete, $header_infos, $type_ressource, $projection) = @_;
 
-    print CLIENT "HTTP/1.1 $status_code $reason_phrases{$status_code}".$EOL.
+    print "HTTP/1.1 $status_code $reason_phrases{$status_code}".$EOL.
 	"$header_infos".$EOR;
 
     eventlog($type_ressource, $ip_client, "$requete", "$projection", $status_code);
@@ -349,7 +354,7 @@ sub senderror
     }
 
     sendheader($stat_code, $requete, "Content-Type: ".$mime, $ressource_type);
-    print CLIENT $contenu;
+    print $contenu;
 
     closeouvrier(1);
 }
@@ -369,7 +374,6 @@ sub closeouvrier
 sub acceptrequest
 {
     # regex meta = {}[]()^$.|*+?\
-    autoflush CLIENT 1;
 
     <CLIENT> =~ /(?i)(^((?-i)GET)\s+(\/[^\s]*)\s+HTTP\/1\.1)\r?\n/
 	or senderror(400);
@@ -448,6 +452,8 @@ sub parse_conf {
 # Param : signal à envoyer
 sub sendSignal
 {
+    select STDOUT;
+
     ($signal) = @_;
     open(PID_FILE, "<", $pidFile)
 	or die ("open $!");

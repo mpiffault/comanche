@@ -1,84 +1,65 @@
-Comanche
---------
 
-Un mini-serveur web en Perl.
+Projet
+======
 
-### AUTEURS
+Binôme
+------
 
-Elodie Joly
+- Elodie JOLY
+- Martin PIFFAULT
 
-Martin Piffault
+Résumé
+------
 
-### AVERTISSEMENT
+Cochez (en mettant un X) les fonctionnalités qui sont implémentées **et** opérationnelles dans votre projet.
 
-Work in progress :
-
-Il manque quelques petites choses, mais Ã§a fonctionne dÃ©jÃ  pas trop mal
-
-### DESCRIPTION
-
-Comanche est un mini serveur web Ã©crit dans le cadre d'un projet d'Ã©tude.
-Le but est d'avoir un petit serveur portable et robuste qui fait peu de choses mais le fait correctement.
-
-S'assurer qu'un fichier comanche.conf correctement Ã©crit (cf. CONFIGURATION) est prÃ©sent Ã  la racine du dossier.
-
-### UTILISATION
-
-comanche fonctionne comme un daemon:
-
-Pour dÃ©marrer le serveur
-
-    comanche start
-
-Pour l'arrÃªter
-
-    comanche stop
-
-Pour connaÃ®tre son Ã©tat
-
-    comanche status
-
-Pour recharger le fichier de configuration
-    comanche reload
-
-### CONFIGURATION
-
-La configuration se fait par l'intermÃ©diaire d'un fichier comanche.conf situÃ© dans le mÃªme rÃ©pertoire que comanche. La syntaxe attendue y est la suivante (configuration type) :
-
-    #### comanche.conf ####
-    # Port d'Ã©coute
-    set port 8088
-
-    # Page renvoyÃ©e par dÃ©faut
-    set default /var/www/index.html
-
-    # Fichier dâ€™index dans les rÃ©pertoires
-    set index index.html
-
-    # Nombre maximal N de requÃªtes simultanÃ©es (>0)
-    set clients 10
-
-    # Journal des Ã©vÃ¨nements
-    set logfile comanche.log
-
-    # PrÃ©fixe des chemins des projections
-    set basedir /var/www
-
-    # Routes de projection fichiers
-    route ^/(.*)$ to /var/www/\1
-
-    # Routes de projection CGI
-    exec ^/(.*)\.exe$ from /var/lib/cgi/\1
-
-    #### ####
-
-### TODO
-
--    Application
-     * FonctionnalitÃ©s de supervision
-     * Nettoyage du code
+  - [X] gestion du port d'écoute
+  - [X] protocole HTTP/1.1
+  - [X] gestion de la page par défaut
+  - [X] gestion des fichiers index dans les répertoires
+  - [X] gestion des logs
+  - [X] gestion des clients en //
+  - [X] gestion du max de clients
+  - [X] routes statiques
+  - [X] routes avec expression régulière
+  - [X] cgi statiques
+  - [X] cgi avec expression régulière
+  - [X] paramètres de cgi
 
 
-### BUG
+Détail
+------
 
-- La commande status Ã©crit sur la sortie standard du terminal oÃ¹ comanche a Ã©tÃ© dÃ©marrÃ©.
+La plupart des fonctionnalités sont opérationnelle. Les défauts constatés sont les suivants:
+
+  - La validitée logique des paramètres du fichier de configuration n'est pas vérifiée (port d'écoute valide, existence des fichiers default ou basedir).
+
+  - Dans les routes avec expression régulière, la partie gauche est bien utilisée comme telle, mais seul une correspondance avec le premier groupement est faite dans la partie droite. L'ajout d'un autre référence que \1 entrainera une nullité de la route.
+
+  - Paramètres CGI: la validité de la chaine des variables n'est pas vérifiée.
+
+  - La fonction status écrit sur la sortie standard du terminal sur lequel il a été démarré.
+
+  - La fonction reload ne prend pas en compte un changement de port (mais prévient l'utilisateur).
+
+Développement
+=============
+
+Implémentation
+--------------
+
+Le PID du service est conservé dans un fichier .comanche.pid, protégé en écriture.
+
+Le type mime des fichiers est déterminé avec la fonction mimeinfo() de File::MimeInfo.
+
+
+
+Gestion
+-------
+
+Expliquez ici en quelques lignes comment a été faite la répartition des tâches dans le développement du projet entre les membres du binôme, puis supprimez cette ligne.
+
+Autres
+------
+
+Donnez ici toutes les autres informations qui vous paraissent importantes.
