@@ -410,19 +410,19 @@ sub parse_conf {
 	if (/^\s*(#|$)/)
 	{next}
 
-	elsif (/^\s*set\s*(port|default|index|logfile|clients|basedir)\s*([^\s#]*)\s*(#.*|$)/)
+	elsif (/^\s*set\s+(port|default|index|logfile|clients|basedir)\s+([^\s#]*)\s*(#|$)/)
 	{
 	    $conf{$1} = $2;
 	}
 
-	elsif (/^\s*route\s*([^\s#]*)\s*to\s*([^\s#]*)\s*(#.*|$)/)
+	elsif (/^\s*route\s+([^\s#]*)\s+to\s+([^\s#]*)\s*(#|$)/)
 	{
 	    push(@proj_type,"get-s");
 	    push(@relative_path,$1);
 	    push(@absolute_path,$2);
 	}
 
-	elsif (/^\s*exec\s*([^\s#]*)\s*from\s*([^\s#]*)\s*(#.*|$)/)
+	elsif (/^\s*exec\s+([^\s#]*)\s+from\s+([^\s#]*)\s*(#|$)/)
 	{
 	    push(@proj_type,"get-d");
 	    push(@relative_path,$1);
@@ -430,7 +430,7 @@ sub parse_conf {
 	}
 	else
 	{
-	    chomp($_);
+	    chomp;
 	    die ("$confFile : erreur de syntaxe ligne $. : '$_'\n");
 	}
     }
