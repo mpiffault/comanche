@@ -40,7 +40,7 @@ La plupart des fonctionnalités sont opérationnelle. Les défauts constatés sont l
 
   - La fonction status écrit sur la sortie standard du terminal sur lequel il a été démarré.
 
-  - La fonction reload ne prend pas en compte un changement de port (mais prévient l'utilisateur).
+  - La fonction reload ne prend pas en compte un changement de port (mais conseille à l'utilisateur de redémarrer).
 
 Développement
 =============
@@ -48,18 +48,30 @@ Développement
 Implémentation
 --------------
 
-Le PID du service est conservé dans un fichier .comanche.pid, protégé en écriture.
+  - Le PID du service est conservé dans un fichier .comanche.pid, protégé en écriture.
 
-Le type mime des fichiers est déterminé avec la fonction mimeinfo() de File::MimeInfo.
+  - Le type mime des fichiers est déterminé avec la fonction mimetype() de File::MimeInfo.
 
+  - Les erreurs 503 Service Unavailable sont envoyées par le répartiteur lui même.
 
+  - Si le fichier de configuration est mal formé, comanche ne démarre pas et indique où l'erreur a été détectée.
+
+  - Les paramètres du fichier de configuration sont stockés dans un hachage.
+
+  - Pour les routes avec expression régulière, le \1 de l'expression de droite est remplacée explicitement par le contenu du premier groupement de l'expression de gauche.
+
+  - Pour les variables des CGI, seule la variable d'environnement QUERY_STRING est définie. D'autre part, la recherche des paramètres se fait sur la chaine de requête. Étant donné que seul le premier regroupement est pris en compte, il faut créer les route vers les cgi en prenant garde à bien isoler le nom du script (cad ne pas grouper les paramètres avec le nom de la page). Cf fichier de configuration joint.
+
+  - Lors de l'arrêt du daemon, celui-ci attend la fin de tous les ouvriers.
 
 Gestion
 -------
 
-Expliquez ici en quelques lignes comment a été faite la répartition des tâches dans le développement du projet entre les membres du binôme, puis supprimez cette ligne.
+M. PIFFAULT a traité la partie système (Gestion des signaux, processus, etc.), le traitement des requêtes, la construction des réponses, le log.
+
+E. JOLY a traité la lecture du fichier de configuration, le listage des dossiers et la gestion des CGI + paramètres.
 
 Autres
 ------
 
-Donnez ici toutes les autres informations qui vous paraissent importantes.
+Le projet ese sur github : https://github.com/mpiffault avec des dossiers correspondants au fichier de configuration tel qu'il est.
