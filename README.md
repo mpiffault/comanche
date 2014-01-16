@@ -1,5 +1,5 @@
 
-Projet
+Comanche Serveur Web en Perl / Projet DA2i
 ======
 
 Binôme
@@ -11,7 +11,7 @@ Binôme
 Résumé
 ------
 
-Cochez (en mettant un X) les fonctionnalités qui sont implémentées **et** opérationnelles dans votre projet.
+Fonctionnalités implémentées et opérationnelles.
 
   - [X] gestion du port d'écoute
   - [X] protocole HTTP/1.1
@@ -30,7 +30,7 @@ Cochez (en mettant un X) les fonctionnalités qui sont implémentées **et** opérat
 Détail
 ------
 
-La plupart des fonctionnalités sont opérationnelle. Les défauts constatés sont les suivants:
+La plupart des fonctionnalitées sont pleinement opérationnelles. Les défauts constatés sont les suivants:
 
   - La validitée logique des paramètres du fichier de configuration n'est pas vérifiée (port d'écoute valide, existence des fichiers default ou basedir).
 
@@ -74,4 +74,4 @@ E. JOLY a traité la lecture du fichier de configuration, le listage des dossiers
 Autres
 ------
 
-Le projet ese sur github : https://github.com/mpiffault avec des dossiers correspondants au fichier de configuration tel qu'il est.
+Le projet est sur github : https://github.com/mpiffault avec des dossiers correspondants au fichier de configuration tel qu'il est.
