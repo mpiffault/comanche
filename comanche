@@ -244,7 +244,7 @@ sub lireressource
 	# $ENV{REQUEST_URI} = $GLOBAL{ress_rel};
 
 	$mime = "text/html";
-	$contenu = `./$ressource`;
+	$contenu = `exec $ressource`;
     }
     return ($mime, $contenu);
 }
