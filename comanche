@@ -105,6 +105,8 @@ sub startDaemon
 		$GLOBAL{ress_rel} = $ressource_rel;
 		$GLOBAL{ress_loc} = $ressource_loc;
 
+		print STDOUT $GLOBAL{ress_loc}."\n"; # DEBUG
+
 	        my ($header_infos, $contenu) = construirereponse($ressource_loc, $ressource_type , $ressource_rel);
 
 		if ($contenu)
@@ -406,6 +408,8 @@ sub parse_conf {
     @proj_type = undef;
     @relative_path = undef;
     @absolute_path = undef;
+
+    $conf{basedir} = ".";
 
     open (CONF, "$confFile")
 	or die ("open ($!)");
